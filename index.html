@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>CHA0S MECH WARS: v7.3 STABLE</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<div id="game-container">
+    <div id="ui-layer" class="hidden">
+        <div class="boss-container" id="boss-hp-box">
+            <div class="boss-label" id="boss-name">TARGET</div>
+            <div class="boss-fill" id="boss-hp-bar"></div>
+        </div>
+        <div class="boss-death-msg" id="boss-death-msg">TARGET DESTROY!!!</div>
+        <div id="biome-msg" class="biome-alert hidden"></div>
+        <div id="pause-screen" class="pause-overlay hidden">SYSTEM PAUSED</div>
+
+        <!-- HUD STRUCTURE -->
+        <div class="hud-panel">
+            <!-- LEFT GROUP -->
+            <div class="stat-box">SCORE <span class="text-highlight" id="score">0</span></div>
+            <div class="stat-box">
+                <div class="skull-red" style="margin-right: 10px;">💀</div>
+                <span class="text-highlight" id="rival-kills">0</span>
+            </div>
+            <!-- RIGHT GROUP -->
+            <div class="stat-box">
+                <div class="text-warn" id="wave">WAVE 1</div>
+            </div>
+        </div>
+
+        <div class="hud-panel" style="align-items: flex-end;">
+            <div class="status-group">
+                <!-- MODULE UI MOVED ABOVE WEAPON -->
+                <div id="module-box" class="stat-box hidden" style="min-width: 120px; justify-content: space-between;">
+                    <span id="mod-name" style="color:#0ff; font-size:12px;">MODULE</span>
+                    <span id="mod-cd" class="text-highlight" style="font-size:12px; margin-left:10px;">READY</span>
+                </div>
+
+                <div class="stat-box">
+                    <div id="weapon">PISTOL <span style="font-size:12px; color:#888;">MK.I</span></div>
+                </div>
+
+                <div id="quad-indicator" class="text-quad hidden" style="font-size: 14px; margin-bottom: 5px;">QUAD DAMAGE!</div>
+                <div id="freeze-indicator" class="text-freeze hidden" style="font-size: 14px; margin-bottom: 5px;">SYSTEM FREEZE!</div>
+                <div id="overclock-indicator" class="text-module hidden" style="font-size: 14px; margin-bottom: 5px;">OVERCLOCK ACTIVE!</div>
+
+                <div class="hp-label">ARMOR INTEGRITY</div>
+                <div class="hp-row">
+                    <div class="mech-hp-container"><div id="mech-hp" class="mech-hp-fill"></div></div>
+                    <div id="shield-val" class="shield-circle">5</div>
+                </div>
+                <div class="mech-jet-container"><div id="mech-jet" class="mech-jet-fill"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="start-screen">
+        <h1 style="font-size: 80px; color: #fff; text-shadow: 0 0 20px #00eaff;">CHA0S<br><span style="font-size:40px; color:#00eaff">MECH WARS</span></h1>
+        <button class="btn" id="start-btn">INITIATE SYSTEM</button>
+        <div class="info-text">WASD: MOVE | MOUSE: FIRE | P: PAUSE<br><span style="color:#f90">[SPACE] ABILITY (DEPENDS ON CLASS)</span><br><br><span style="color:#f90">[S] SHOTGUN</span> <span style="color:#bf0">[M] MG</span> <span style="color:#ff0">[R] RPG</span> <span style="color:#f0f">[L] LASER</span><br><span style="color:#0ff">[SHIFT] ACTIVATE MODULE</span></div>
+    </div>
+    <div id="class-select-screen" class="hidden">
+        <h1 style="font-size: 36px; margin-bottom: 40px; color: #fff; text-shadow: 0 0 10px #fff;">SELECT CHASSIS</h1>
+        <div class="class-container">
+            <div class="mech-card" data-type="battle" data-class="battle"><h2>BATTLE</h2><canvas id="preview-battle" class="mech-preview"></canvas><div class="stat-row"><span>HP</span><div class="stat-bar"><div class="stat-fill" style="width: 66%; background:#00eaff"></div></div></div><div class="stat-row"><span>SPD</span><div class="stat-bar"><div class="stat-fill" style="width: 80%; background:#eb2"></div></div></div><div class="stat-row"><span>SHLD</span><div class="stat-bar"><div class="stat-fill" style="width: 50%; background:#0ff"></div></div></div><div class="ability">[SPACE] JETPACK</div><div class="desc">Balanced MK.I chassis. Medium Regen. Reliable.</div></div>
+            <div class="mech-card" data-type="heavy" data-class="heavy"><h2>HEAVY</h2><canvas id="preview-heavy" class="mech-preview"></canvas><div class="stat-row"><span>HP</span><div class="stat-bar"><div class="stat-fill" style="width: 100%; background:#f90"></div></div></div><div class="stat-row"><span>SPD</span><div class="stat-bar"><div class="stat-fill" style="width: 50%; background:#eb2"></div></div></div><div class="stat-row"><span>SHLD</span><div class="stat-bar"><div class="stat-fill" style="width: 100%; background:#0ff"></div></div></div><div class="ability">[SPACE] RAM DASH</div><div class="desc">High armor. Medium Shield Regen. Explosive Dash.</div></div>
+            <div class="mech-card" data-type="scout" data-class="scout"><h2>SCOUT</h2><canvas id="preview-scout" class="mech-preview"></canvas><div class="stat-row"><span>HP</span><div class="stat-bar"><div class="stat-fill" style="width: 50%; background:#0f0"></div></div></div><div class="stat-row"><span>SPD</span><div class="stat-bar"><div class="stat-fill" style="width: 100%; background:#eb2"></div></div></div><div class="stat-row"><span>SHIELD</span><div class="stat-bar"><div class="stat-fill" style="width: 30%; background:#0ff"></div></div></div><div class="ability">[SPACE] TURBO JETS</div><div class="desc">Fragile (Max Shield 3). 3x Fuel. 2x Flight speed. Hit and run.</div></div>
+        </div>
+    </div>
+    <div id="game-over-screen" class="hidden"><h1 style="color: #f00;">CRITICAL<br>FAILURE</h1><div style="margin-bottom: 10px; font-size: 20px; color: #f90;" id="death-reason"></div><div style="margin-bottom: 30px; font-size: 24px;">SCORE: <span class="text-highlight" id="final-score">0</span></div><button class="btn" id="reboot-btn">REBOOT</button></div>
+    <div id="error-screen"><h1 style="color: #f00; font-size: 30px;">SYSTEM ERROR</h1><div id="error-msg" style="color: #fff; font-family: monospace; font-size: 12px; max-width: 80%;"></div></div>
+    <canvas id="game"></canvas>
+</div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+/* CORE STYLES */
+        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Press Start 2P', cursive; user-select: none; cursor: crosshair; color: #fff; }
+        #game-container { position: relative; width: 100vw; height: 100vh; box-shadow: inset 0 0 100px rgba(0,0,0,0.9); }
+        #game-container::after { content: " "; display: block; position: absolute; top: 0; left: 0; bottom: 0; right: 0; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 255, 255, 0.02) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03)); background-size: 100% 4px, 6px 100%; pointer-events: none; z-index: 30; opacity: 0.6; }
+        canvas { display: block; image-rendering: pixelated; }
+        .hidden { display: none !important; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; padding: 30px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; z-index: 10; transition: filter 0.1s; }
+
+        /* ANIMATIONS */
+        .glitch-active .stat-box { animation: glitch-anim 0.2s cubic-bezier(.25, .46, .45, .94) both infinite; }
+        @keyframes glitch-anim { 0% { transform: translate(0); } 20% { transform: translate(-1px, 1px); text-shadow: 1px 0 #00eaff, -1px 0 #f00; } 40% { transform: translate(-1px, -1px); text-shadow: 1px 0 #f00, -1px 0 #00eaff; } 60% { transform: translate(1px, 1px); text-shadow: 1px 0 #00eaff, -1px 0 #f00; } 80% { transform: translate(1px, -1px); text-shadow: 1px 0 #f00, -1px 0 #00eaff; } 100% { transform: translate(0); text-shadow: none; } }
+        .critical-ui .stat-box, .critical-ui .mech-hp-container { border-color: #f00 !important; box-shadow: 0 0 15px #f00, inset 0 0 10px #500 !important; color: #f00 !important; animation: pulse-red 0.5s infinite alternate; }
+        .critical-ui .text-highlight { color: #f00; }
+        @keyframes pulse-red { from { box-shadow: 0 0 10px #f00; } to { box-shadow: 0 0 25px #f00; } }
+
+        /* HUD */
+        .hud-panel { display: flex; justify-content: flex-start; align-items: flex-start; text-shadow: 2px 2px 0 #000; gap: 20px; }
+        .stat-box { background: rgba(0, 20, 30, 0.85); border: 2px solid #00eaff; padding: 10px 20px; box-shadow: 0 0 10px rgba(0, 234, 255, 0.3); color: #00eaff; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); margin-bottom: 10px; display: flex; align-items: center; gap: 10px; transition: border-color 0.3s, box-shadow 0.3s;}
+        .stat-box:last-child { margin-left: auto; }
+
+        .text-highlight { color: #fff; } .text-warn { color: #ea9e22; }
+        .text-quad { color: #f0f; animation: pulse 0.2s infinite; } .text-freeze { color: #60f; animation: shimmer 0.5s infinite; }
+        .text-module { color: #0ff; animation: pulse 0.5s infinite; }
+
+        .skull-red { color: #f00; font-size: 18px; text-shadow: 0 0 5px #f00; filter: drop-shadow(0 0 2px #000); }
+
+        /* MECH STATS */
+        .status-group { display: flex; flex-direction: column; align-items: flex-start; pointer-events: none; }
+        .hp-label { font-size: 10px; color: #00eaff; margin-bottom: 4px; letter-spacing: 2px; text-shadow: 0 0 5px #00eaff; }
+        .mech-hp-container { width: 300px; height: 24px; border: 2px solid #00eaff; background: #001020; position: relative; box-shadow: 0 0 15px #00eaff; transform: skewX(-15deg); overflow: hidden; margin-bottom: 5px; }
+        .mech-hp-fill { height: 100%; background: linear-gradient(90deg, #00eaff, #0088aa); width: 100%; transition: width 0.1s; }
+        .mech-jet-container { width: 250px; height: 10px; border: 1px solid #555; background: #111; transform: skewX(-15deg); overflow: hidden; display: block; }
+        .mech-jet-fill { height: 100%; background: #f90; width: 100%; transition: width 0.1s; }
+        .hp-row { display: flex; align-items: center; }
+        .shield-circle { width: 36px; height: 36px; border-radius: 50%; border: 3px solid #fff; background: rgba(0, 255, 255, 0.5); color: #fff; display: none; justify-content: center; align-items: center; font-size: 16px; font-weight: bold; margin-left: 15px; box-shadow: 0 0 15px #00eaff; animation: pulse 1s infinite; }
+
+        .boss-container { position: absolute; top: 40px; left: 50%; transform: translateX(-50%); width: 600px; height: 24px; border: 2px solid #f00; background: rgba(20, 0, 0, 0.8); display: none; z-index: 12; box-shadow: 0 0 20px #f00; }
+        .boss-fill { height: 100%; background: linear-gradient(90deg, #f00, #800); width: 100%; transition: width 0.1s; }
+        .boss-label { position: absolute; width: 100%; text-align: center; top: -30px; color: #f00; font-size: 16px; text-shadow: 2px 2px 0 #000; letter-spacing: 4px; font-weight: bold;}
+        .boss-death-msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 80px; color: #f00; text-shadow: 0 0 30px #f00, 4px 4px 0 #000; letter-spacing: 8px; font-weight: bold; z-index: 50; pointer-events: none; animation: bossDeathAnim 2s forwards; display: none; }
+        @keyframes bossDeathAnim { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); } 20% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); } 40% { transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); } }
+
+        /* MENUS */
+        #start-screen, #game-over-screen, #error-screen, #class-select-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 10, 15, 0.98); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; border: 20px solid #111; box-sizing: border-box; }
+        #error-screen { display: none; z-index: 100; border-color: #f00; }
+        h1 { font-size: 60px; color: #00eaff; text-shadow: 0 0 15px #00eaff; margin-bottom: 40px; text-align: center; line-height: 1.2; }
+        .btn { background: #000; color: #00eaff; border: 4px solid #00eaff; padding: 20px 50px; font-size: 24px; cursor: pointer; font-family: inherit; text-transform: uppercase; transition: all 0.1s; box-shadow: 0 0 20px rgba(0,234,255,0.5); }
+        .btn:hover { background: #00eaff; color: #000; transform: scale(1.05); box-shadow: 0 0 40px rgba(0,234,255,0.8); }
+        .info-text { margin-top: 40px; color: #aaa; font-size: 12px; line-height: 2.2; text-align: center; text-shadow: 1px 1px 0 #000; }
+        .pause-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; font-size: 60px; color: #00eaff; text-shadow: 0 0 20px #00eaff; z-index: 15; }
+        .biome-alert { position: absolute; top: 40%; width: 100%; text-align: center; font-size: 60px; color: #fff; text-shadow: 0 0 20px #00eaff; animation: fadeOut 4s forwards; pointer-events: none; z-index: 12; letter-spacing: 10px;}
+        #class-select-screen { z-index: 25; display: flex; background: radial-gradient(circle at center, #051015 0%, #000 100%); }
+        .class-container { display: flex; gap: 40px; justify-content: center; align-items: stretch; z-index: 2; }
+        .mech-card { border: 2px solid #333; background: rgba(0,15,25,0.85); width: 300px; padding: 25px; display: flex; flex-direction: column; align-items: center; cursor: pointer; position: relative; overflow: hidden; transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s; animation: slideUp 0.5s ease-out forwards; opacity: 0; }
+        .mech-card:nth-child(1) { animation-delay: 0.1s; } .mech-card:nth-child(2) { animation-delay: 0.2s; } .mech-card:nth-child(3) { animation-delay: 0.3s; }
+        .mech-card:hover { transform: translateY(-15px) scale(1.02); z-index: 10; }
+        .mech-card[data-type="battle"]:hover { border-color: #00eaff; box-shadow: 0 0 40px rgba(0, 234, 255, 0.3); }
+        .mech-card[data-type="heavy"]:hover { border-color: #f90; box-shadow: 0 0 40px rgba(255, 153, 0, 0.3); }
+        .mech-card[data-type="scout"]:hover { border-color: #0f0; box-shadow: 0 0 40px rgba(0, 255, 0, 0.3); }
+        .mech-card h2 { color: #fff; font-size: 22px; margin: 10px 0; letter-spacing: 2px; text-shadow: 2px 2px 0 #000; }
+        .mech-preview { width: 128px; height: 128px; margin: 20px; image-rendering: pixelated; filter: drop-shadow(0 10px 10px rgba(0,0,0,0.5)); transition: transform 0.3s; }
+        .mech-card:hover .mech-preview { transform: scale(1.1); }
+        .stat-row { width: 100%; display: flex; justify-content: space-between; align-items: center; margin: 8px 0; font-size: 12px; color: #888; font-family: monospace; }
+        .stat-bar { width: 140px; height: 8px; background: #111; border: 1px solid #333; overflow: hidden; }
+        .stat-fill { height: 100%; width: 0%; transition: width 1s ease-out; }
+        .mech-card:hover .stat-fill { filter: brightness(1.5); }
+        .desc { font-size: 11px; color: #aaa; text-align: center; line-height: 1.6; margin-top: 20px; height: 60px; border-top: 1px solid #333; padding-top: 15px; }
+        .ability { color: #fff; font-size: 11px; margin-top: 15px; text-align: center; background: #222; padding: 5px 10px; border-radius: 4px; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(50px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes flash { 0%, 100% {opacity:1;} 50% {opacity:0;} }
+        @keyframes pulse { 0% {transform:scale(1);} 50% {transform:scale(1.1);} 100% {transform:scale(1);} }
+        @keyframes shimmer { 0% {text-shadow: 0 0 5px #60f;} 50% {text-shadow: 0 0 20px #fff;} 100% {text-shadow: 0 0 5px #60f;} }
+        @keyframes fadeOut { 0% {opacity:1; transform:scale(1);} 80% {opacity:1; transform:scale(1.1);} 100% {opacity:0; transform:scale(1.2);} }

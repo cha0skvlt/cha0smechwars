@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.vite.pid
+.vite.log
+.cursor/
+.DS_Store
+*.log
