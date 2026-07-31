@@ -1,4 +1,4 @@
-.PHONY: install start stop restart build preview status
+.PHONY: install start stop restart build preview status logs logs-clear
 
 PORT ?= 18765
 PIDFILE := .vite.pid
@@ -64,3 +64,11 @@ build:
 
 preview: build
 	npx vite preview --host 127.0.0.1 --port $(PORT)
+
+logs:
+	@mkdir -p "$(ROOT)/logs"
+	@touch "$(ROOT)/logs/game.ndjson"
+	tail -f "$(ROOT)/logs/game.ndjson"
+
+logs-clear:
+	@curl -s -X POST "http://127.0.0.1:$(PORT)/__cmw/log/clear" && echo " cleared" || echo "clear failed (is server up?)"

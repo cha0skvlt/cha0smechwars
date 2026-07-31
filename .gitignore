@@ -5,3 +5,5 @@ dist/
 .cursor/
 .DS_Store
 *.log
+logs/*.ndjson
+logs/*.ndjson.1

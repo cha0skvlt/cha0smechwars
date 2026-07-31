@@ -1,10 +1,10 @@
 import { Entity } from './Entity.js';
 import { BALANCE } from '../config/balance.js';
 import { DOM } from '../core/dom.js';
-import { Cam, Ctx, Input, W, H } from '../core/runtime.js';
+import { Input, W, H } from '../core/runtime.js';
 import { Grid } from '../core/grid.js';
 import { AudioSys } from '../audio/audio.js';
-import { Cache, ShadowCv } from '../render/bake.js';
+import { renderVisual } from '../render/PixelRenderer.js';
 import { lerp } from '../core/lerp.js';
 import { Game } from '../game/Game.js';
 import { BotController } from './BotController.js';
@@ -12,12 +12,24 @@ import { Bullet } from './Bullet.js';
 import { Turret } from './Turret.js';
 import { GravityWell } from './GravityWell.js';
 import { Particle, Shockwave, Floater } from './effects.js';
+import { Logger } from '../core/Logger.js';
+import { applyDamage, isHostile } from '../combat/damage.js';
+import { rpgFireKick, rpgFireShake } from '../combat/rpgFeel.js';
+import { consumeFuel, regenerateFuel } from './fuel.js';
+import { initializeProgression } from '../progression/progression.js';
 
 // @meta:Player - Main player entity with weapons, modules, abilities, and class-specific stats
 export class Player extends Entity {
-    constructor(type, isBot=false) {
+    constructor(type, options={}) {
         super(W/2,H/2,32,32);
-        this.type = type; this.isBot = isBot;
+        if(typeof options === 'boolean') options = { isBot: options };
+        this.type = type;
+        this.isBot = !!options.isBot;
+        this.isHumanPlayer = !this.isBot;
+        this.faction = options.faction || (this.isBot ? 'rival' : 'player');
+        this.role = options.role || (this.isBot ? (this.faction === 'rival' ? 'rival' : 'ally') : 'human');
+        this.owner = options.owner || null;
+        this.ownsProgression = true;
         this.wep='pistol'; this.cd=0; this.inv=0; this.levels={pistol:1,shotgun:1,mg:1,rpg:1,laser:1}; this.quad=0;
         this.shield=0; this.shieldRegenT = 0;
         // Module system properties (turret, warp, emp, grav, overclock)
@@ -25,18 +37,25 @@ export class Player extends Entity {
         this.moduleCd = 0;
         this.moduleMaxCd = 0;
         this.overclock = 0;
+        initializeProgression(this);
 
         this.recoilOff = {x:0, y:0};
-        if(type === 'heavy') { this.hp = 18; this.maxHp = 18; this.spd = 3.5; this.fuel = 0; this.canFly = false; this.maxShield = 12; this.shieldRate = 180; }
-        else if(type === 'scout') { this.hp = 10; this.maxHp = 10; this.spd = 5.0; this.fuel = 300; this.maxFuel = 300; this.canFly = true; this.maxShield = 4; this.shieldRate = 300; }
-        else { this.hp = 12; this.maxHp = 12; this.spd = 4.5; this.fuel = 100; this.maxFuel = 100; this.canFly = true; this.maxShield = 6; this.shieldRate = 180; }
-        this.flying=false; this.dashActive = false; this.dashVec = {x:0, y:0}; this.dashTime = 0; this.dashInv = 0; // Post-dash invulnerability for heavy mech
+        const mech = BALANCE.MECHS[type] || BALANCE.MECHS.battle;
+        this.hp = mech.hp; this.maxHp = mech.hp; this.spd = mech.spd;
+        this.fuel = mech.fuel; this.maxFuel = mech.maxFuel; this.canFly = mech.canFly;
+        this.baseMaxFuel = mech.maxFuel;
+        this.maxShield = mech.shield;
+        this.jetMult = mech.jetMult || 1;
+        this.fuelRefillThreshold = mech.fuelRefillThreshold || 0;
+        this.fuelRegen = mech.fuelRegen || 0;
+        this.fuelDrain = mech.fuelDrain || 0;
+        this.flying=false; this.dashActive = false; this.dashVec = {x:0, y:0}; this.dashTime = 0; this.dashInv = 0;
 
         let safe = false; let attempts = 0;
         while(!safe && attempts < 100) {
             attempts++;
-            this.x = isBot ? (Math.random()*2800+100) : (1500);
-            this.y = isBot ? (Math.random()*2800+100) : (1500);
+            this.x = this.isBot ? (Math.random()*2800+100) : (1500);
+            this.y = this.isBot ? (Math.random()*2800+100) : (1500);
             safe = !Game.checkWall({x:this.x, y:this.y, w:this.w, h:this.h});
         }
         if(!safe) { this.x = 1500; this.y = 1500; }
@@ -48,7 +67,10 @@ export class Player extends Entity {
     }
     update() {
         this.recoilOff.x *= 0.8; this.recoilOff.y *= 0.8;
-        if(this.shield > 0 && this.shield < this.maxShield && this.overclock <= 0) { this.shieldRegenT++; if(this.shieldRegenT >= this.shieldRate) { this.shield++; this.shieldRegenT = 0; } }
+        if(this.shield > 0 && this.shield < this.maxShield && this.overclock <= 0) {
+            this.shieldRegenT++;
+            if(this.shieldRegenT >= this.shieldRegenRate) { this.shield += BALANCE.UNIT; this.shieldRegenT = 0; }
+        }
         let vx=0, vy=0;
         let input;
         if(this.isBot) { this.brain.update(); input = this.brain.input; }
@@ -57,32 +79,28 @@ export class Player extends Entity {
         if(!this.dashActive) { if(input.w) vy=-this.spd; if(input.s) vy=this.spd; if(input.a) vx=-this.spd; if(input.d) vx=this.spd; if(vx!=0&&vy!=0) {vx*=0.707; vy*=0.707;} }
 
         if(this.type !== 'heavy') {
-            if(this.fuel <= 0) this.canFly = false; if(this.fuel > (this.type==='scout'?50:20)) this.canFly = true;
+            if(this.fuel <= 0) this.canFly = false; if(this.fuel > this.fuelRefillThreshold) this.canFly = true;
             if(input.space && this.canFly && this.fuel > 0) {
-                this.flying=true; this.fuel -= 1.0; let mult = this.type === 'scout' ? 2.0 : 1.5;
+                this.flying=true; this.fuel -= this.fuelDrain; let mult = this.jetMult;
                 if(this.isBot) { } else if(vx!==0 || vy!==0) { vx*=mult; vy*=mult; }
                 if(Game.frame%3===0) Game.parts.push(new Particle(this.x+16, this.y+32, '#0ff', 2)); if(!this.isBot) AudioSys.jetpack(this.x);
-            } else { if(this.flying) this.land(); this.flying=false; if(this.fuel < (this.type==='scout'?300:100)) this.fuel += 0.5; }
+            } else { if(this.flying) this.land(); this.flying=false; if(this.fuel < this.maxFuel) regenerateFuel(this, this.fuelRegen); }
         } else {
+            const heavy = BALANCE.MECHS.heavy;
             if(this.dashActive) {
                 vx = this.dashVec.x; vy = this.dashVec.y; this.dashTime--;
                 if(this.dashTime <= 0) {
                     this.dashActive = false;
-                    // Post-dash invulnerability for heavy mech (12 frames = 0.2s at 60fps)
-                    // Balanced: fuel takes time to restore to 50, preventing spam
-                    if(this.type === 'heavy') {
-                        this.dashInv = 12;
-                    }
+                    this.dashInv = heavy.dashInv;
                 }
-                // Optimized dash collision - replaced forEach with for loop
-                let targets = this.isBot ? [Game.player, ...Game.enemies] : Game.enemies;
+                const targets = Game.getCombatTargets(this);
                 for(let i=0, len=targets.length; i<len; i++) {
                     let e = targets[i];
                     if(this.rectIntersect(e)) {
-                        Game.dmg(e, 5, this);
+                        Game.dmg(e, BALANCE.DAMAGE.dash, this);
                         const ang = Math.atan2(e.y-this.y, e.x-this.x);
-                        e.x += Math.cos(ang)*30;
-                        e.y += Math.sin(ang)*30;
+                        e.x += Math.cos(ang)*heavy.dashKnockback;
+                        e.y += Math.sin(ang)*heavy.dashKnockback;
                         if(!this.isBot) {
                             Game.shake = 5;
                             AudioSys.impact(this.x);
@@ -91,12 +109,14 @@ export class Player extends Entity {
                 }
                 Game.parts.push(new Particle(this.x+16, this.y+32, '#fa0', 1.5));
             } else {
-                 if(this.fuel < 50) this.fuel++;
-                 if(input.space && this.fuel >= 50) {
+                 if(this.fuel < this.maxFuel) regenerateFuel(this, heavy.fuelRegen);
+                 if(input.space && this.fuel >= heavy.dashCost) {
                      let mx = input.mouse.wx || (input.mouse.x+Cam.x); let my = input.mouse.wy || (input.mouse.y+Cam.y);
                      let ang = Math.atan2(my - (this.y+16), mx - (this.x+16));
                      if(!this.isBot && (vx!==0 || vy!==0)) ang = Math.atan2(vy, vx);
-                     this.dashVec = { x: Math.cos(ang)*10, y: Math.sin(ang)*10 }; this.dashActive = true; this.dashTime = 8; this.fuel = 0; if(!this.isBot) AudioSys.dash(this.x);
+                     this.dashVec = { x: Math.cos(ang)*heavy.dashSpeed, y: Math.sin(ang)*heavy.dashSpeed };
+                     this.dashActive = true; this.dashTime = heavy.dashDuration; consumeFuel(this, heavy.dashCost);
+                     if(!this.isBot) AudioSys.dash(this.x);
                  }
             }
         }
@@ -105,6 +125,7 @@ export class Player extends Entity {
         if(this.moduleCd > 0) this.moduleCd--;
         if(input.shift && this.module && this.moduleCd <= 0) {
             AudioSys.moduleDeploy();
+            Logger.event('player', 'module_activate', this.module, { module: this.module, bot: !!this.isBot, class: this.type });
             if(this.module === 'turret') {
                 // Turret module activation effect (15 particles, shockwave)
                 if(!this.isBot) {
@@ -118,8 +139,8 @@ export class Player extends Entity {
                     }
                     Game.waves.push(new Shockwave(this.x+16, this.y+16, 50));
                 }
-                Game.friendlies.push(new Turret(this.x, this.y));
-                this.moduleMaxCd = 900; // 15s
+                Game.friendlies.push(new Turret(this.x, this.y, this));
+                this.moduleMaxCd = BALANCE.MODULE_COOLDOWN.turret;
             }
             else if(this.module === 'warp') {
                 Game.timeScale = 0.2; Game.warpTimer = BALANCE.MODULE_DURATION.warp;
@@ -127,12 +148,12 @@ export class Player extends Entity {
                 this.moduleMaxCd = BALANCE.MODULE_COOLDOWN.warp;
             }
             else if(this.module === 'emp') {
-                // THUNDERCLAP: 5 DMG to all enemies + Bullet Clear + Stun
-                Game.bullets = Game.bullets.filter(b => !b.enemy);
-                for(let i=0; i<Game.enemies.length; i++) {
-                    let e = Game.enemies[i];
+                Game.bullets = Game.bullets.filter(b => !isHostile(b.source, this));
+                const targets = Game.getCombatTargets(this);
+                for(let i=0; i<targets.length; i++) {
+                    let e = targets[i];
                     e.hitT = 120;
-                    Game.dmg(e, 5, this);
+                    Game.dmg(e, BALANCE.DAMAGE.emp, this);
                 }
                 // EMP activation visual effect (3 shockwaves, 30 lightning particles)
                 if(!this.isBot) {
@@ -160,7 +181,7 @@ export class Player extends Entity {
                 if(this.isBot && this.brain.target) { mx = this.brain.target.x; my = this.brain.target.y; }
                 else if(!this.isBot && (!Input.mouse.wx || !Input.mouse.wy)) { mx = this.x + 16; my = this.y + 16; }
 
-                Game.friendlies.push(new GravityWell(mx, my));
+                Game.friendlies.push(new GravityWell(mx, my, this));
                 AudioSys.gravSound();
                 this.moduleMaxCd = BALANCE.MODULE_COOLDOWN.grav;
             }
@@ -202,16 +223,20 @@ export class Player extends Entity {
         if(input.mouse.down && this.cd<=0 && !this.dashActive) {
             const c=this.center(), ang=Math.atan2(input.mouse.wy-c.y, input.mouse.wx-c.x);
             const l=this.levels[this.wep];
-            let kick = this.wep==='rpg'?8:(this.wep==='shotgun'?4:1);
+            let kick = this.wep==='rpg'
+                ? rpgFireKick(l)
+                : (this.wep==='shotgun'?4:1);
             // Level 2+ dual shots: MG/RPG/Laser get recoil multiplier
             const hasDual = l >= 2 && (this.wep==='mg' || this.wep==='rpg' || this.wep==='laser');
-            if(hasDual) kick *= 1.5;
+            if(hasDual && this.wep!=='rpg') kick *= 1.5;
             this.recoilOff.x -= Math.cos(ang) * kick; this.recoilOff.y -= Math.sin(ang) * kick;
             if(this.wep!=='laser' && !this.flying) {
                 let kx = Math.cos(ang)*kick; let ky = Math.sin(ang)*kick;
                 if(!Game.checkWall({x:this.x-kx,y:this.y,w:this.w,h:this.h})) this.x-=kx;
                 if(!Game.checkWall({x:this.x,y:this.y-ky,w:this.w,h:this.h})) this.y-=ky;
-                if(!this.isBot) Game.shake=kick*1.5;
+                if(!this.isBot) {
+                    Game.shake = this.wep==='rpg' ? rpgFireShake(l) : kick*1.5;
+                }
             }
             // Muzzle flash effect when firing (weapon-specific, 2 particles)
             if(!this.isBot) {
@@ -228,8 +253,8 @@ export class Player extends Entity {
             }
             const spawn = (ox, oy, spreadAngle=0) => {
                 let bulletAng = ang + spreadAngle;
-                let b = new Bullet(c.x+ox, c.y+oy, bulletAng, this.wep, false, l);
-                if(this.isBot) b.bot = true;
+                let b = new Bullet(c.x+ox, c.y+oy, bulletAng, this.wep, false, l, this);
+                b.airborne = !!this.flying;
                 Game.bullets.push(b);
             };
 
@@ -241,55 +266,27 @@ export class Player extends Entity {
                 spawn(offX, offY);
                 spawn(-offX, -offY);
             } else if(this.wep==='shotgun') {
-                // Shotgun: Level 2+ doubles pellets and reduces spread
-                let cnt = 5 + l;
-                if(l >= 2) cnt *= 2; // Double pellets at level 2+
-                const spread = l >= 2 ? 0.48 : 0.8; // Tighter spread at level 2+
+                const sg = BALANCE.WEAPONS.shotgun;
+                let cnt = sg.pelletsBase + l;
+                if(l >= 2) cnt *= 2;
+                const spread = l >= 2 ? sg.spreadL2 : sg.spreadL1;
                 for(let i=0; i<cnt; i++) {
                     spawn(0, 0, (Math.random()-.5)*spread);
                 }
-            } else if(this.wep==='rpg' && l >= 2) {
-                // Level 2+ RPG: dual rockets
-                const perp = ang + Math.PI/2;
-                const offX = Math.cos(perp)*10;
-                const offY = Math.sin(perp)*10;
-                spawn(offX, offY);
-                spawn(-offX, -offY);
-            } else if(this.wep==='laser' && l >= 2) {
-                // Level 2+ Laser: dual lasers
-                const perp = ang + Math.PI/2;
-                const offX = Math.cos(perp)*8;
-                const offY = Math.sin(perp)*8;
-                spawn(offX, offY);
-                spawn(-offX, -offY);
             } else {
                 spawn(0, 0);
             }
 
-            // Unified fire rate scaling: baseCooldown - (level - 1)
-            let baseCd = 0;
-            const baseCooldowns = {
-                pistol: 18,
-                shotgun: 45,
-                mg: 6,
-                rpg: 80,
-                laser: 50
-            };
-            const minCooldowns = {
-                pistol: 5,
-                shotgun: 20,
-                mg: 2,
-                rpg: 40,
-                laser: 30
-            };
-            const baseCooldown = baseCooldowns[this.wep] || 18;
-            const minCooldown = minCooldowns[this.wep] || 5;
-            baseCd = Math.max(minCooldown, baseCooldown - (l - 1));
+            // Unified fire rate: max(minCd, baseCd - (level - 1))
+            const wcfg = BALANCE.WEAPONS[this.wep] || BALANCE.WEAPONS.pistol;
+            let baseCd = Math.max(wcfg.minCd, wcfg.baseCd - (l - 1));
+            baseCd = Math.ceil(baseCd * this.fireRateMult);
 
             if(this.overclock > 0) baseCd = Math.floor(baseCd * 0.5);
             this.cd = baseCd;
 
             AudioSys.shoot(this.wep, this.x);
+            Logger.debug('combat', 'shoot', this.wep, { wep: this.wep, bot: !!this.isBot, lvl: l });
         }
         if(!this.isBot) AudioSys.updateFilter(this.hp/this.maxHp);
     }
@@ -310,29 +307,57 @@ export class Player extends Entity {
     }
     land() {
         if(!this.isBot) { Game.shake=20; AudioSys.impact(this.x); }
-        if (this.isBot) { Game.explode(this.x+16, this.y+32, 80, false, true, false, true, this); }
-        else { Game.explode(this.x+16, this.y+32, 80, true, true, false, false, this); }
+        if (this.isBot) { Game.explode(this.x+16, this.y+32, 80, false, true, false, true, this, null, BALANCE.DAMAGE.dash); }
+        else { Game.explode(this.x+16, this.y+32, 80, true, true, false, false, this, null, BALANCE.DAMAGE.dash); }
     }
     draw(alpha) {
         let dX = lerp(this.lastX, this.x, alpha); let dY = lerp(this.lastY, this.y, alpha);
         let dx = this.recoilOff.x; let dy = this.recoilOff.y;
         // Visual invulnerability: only regular inv (no visual effect for dash/post-dash inv to avoid confusion)
         if(this.inv>0&&Game.frame%4<2) return;
-        if(this.flying) Ctx.drawImage(ShadowCv, dX, dY+48, 32, 16); else Ctx.drawImage(ShadowCv, dX, dY+24, 32, 16);
+        renderVisual('shadow.ground', { x: dX, y: this.flying ? dY + 48 : dY + 24, width: 32 });
         const s = this.flying ? 1.2 : 1; const off = this.flying ? -10 : 0;
-        let key = this.isBot ? ('bot_'+this.type) : (this.type==='battle'?'player':this.type); if(this.quad > 0 && !this.isBot) key += '_q';
-        Ctx.drawImage(Cache[key], dX - (s-1)*16 + dx, dY - (s-1)*16 + off + dy, 32*s, 32*s);
-        if(this.shield > 0) { Ctx.save(); Ctx.globalCompositeOperation = 'lighter'; let col = this.isBot ? '255, 0, 0' : '0, 255, 255'; Ctx.strokeStyle = `rgba(${col}, ${0.6 + Math.sin(Game.frame*0.2)*0.2})`; Ctx.fillStyle = `rgba(${col}, 0.15)`; Ctx.lineWidth = 2; Ctx.beginPath(); Ctx.arc(dX+16, dY+16+off, 28, 0, Math.PI*2); Ctx.fill(); Ctx.stroke(); Ctx.restore(); }
-        if(this.dashActive) { Ctx.globalAlpha = 0.5; Ctx.drawImage(Cache[key], dX - this.dashVec.x*2, dY - this.dashVec.y*2, 32, 32); Ctx.globalAlpha = 1.0; }
-        if(this.overclock > 0) { Ctx.save(); Ctx.globalCompositeOperation='lighter'; Ctx.fillStyle=`rgba(255,0,0,${Math.sin(Game.frame)*0.5})`; Ctx.fillRect(dX,dY,32,32); Ctx.restore(); }
+        const rival = this.faction === 'rival';
+        let spriteId = rival ? `sprite.rival.${this.type}` : `sprite.player.${this.type}`;
+        if(this.quad > 0 && !rival) spriteId += '.quad';
+        renderVisual(spriteId, { x: dX - (s-1)*16 + dx, y: dY - (s-1)*16 + off + dy, width: 32*s, height: 32*s });
+        if(this.shield > 0) renderVisual(rival ? 'effect.shield.rival' : 'effect.shield.player', {
+            x: dX + 16,
+            y: dY + 16 + off,
+            radius: 28,
+            rgb: rival ? '255, 0, 0' : '0, 255, 255',
+            pulse: 0.6 + Math.sin(Game.frame * 0.2) * 0.2,
+        });
+        if(this.dashActive) renderVisual('effect.dash.echo', {
+            spriteId,
+            x: dX - this.dashVec.x * 2,
+            y: dY - this.dashVec.y * 2,
+            width: 32,
+            height: 32,
+        });
+        if(this.overclock > 0) renderVisual('effect.overclock', {
+            x: dX,
+            y: dY,
+            width: 32,
+            height: 32,
+            alpha: Math.sin(Game.frame) * 0.5,
+        });
     }
-    takeDamage(amt=1, source=null) {
+    takeDamage(amt, source=null) {
         // Invulnerability: during dash OR post-dash invulnerability for heavy mech
         if(this.inv>0 || this.dashActive || (this.type === 'heavy' && this.dashInv > 0)) return;
         this.lastAttacker = source;
         if(!this.isBot) { DOM.glitch(); if(amt >= 3) AudioSys.triggerConcussion(); }
-        Game.floaters.push(new Floater(this.x + 16, this.y, amt, true));
-        if(this.shield > 0) { this.shield -= amt; AudioSys.playTone(800, 'sawtooth', 0.1, 0.1, null, this.x); this.inv=20; } else { this.hp -= amt; this.inv=30; }
-        if(!this.isBot) Game.shake=5; Game.parts.push(new Particle(this.x, this.y, this.isBot ? '#f00' : '#0ff'));
+        Game.floaters.push(new Floater(this.x + 16, this.y, amt, 'hurt'));
+        const { shieldDamage, hpDamage } = applyDamage(this, amt);
+        if(shieldDamage > 0) {
+            AudioSys.playTone(800, 'sawtooth', 0.1, 0.1, null, this.x);
+            this.inv = BALANCE.IFRAMES.shieldHit;
+        }
+        if(hpDamage > 0) {
+            this.inv = BALANCE.IFRAMES.hpHit;
+        }
+        if(!this.isBot) Game.shake=5;
+        Game.parts.push(new Particle(this.x, this.y, this.faction === 'rival' ? '#f00' : '#0ff'));
     }
 }

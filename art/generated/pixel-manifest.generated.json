@@ -1,0 +1,487 @@
+{
+  "version": 1,
+  "logicalPixelWorldPx": 4,
+  "contractHash": "e5537030",
+  "assets": [
+    {
+      "id": "effect.decal.organic",
+      "width": 16,
+      "height": 16,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "defd82fc"
+    },
+    {
+      "id": "sprite.enemy.commando",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "4c2e4a80"
+    },
+    {
+      "id": "sprite.enemy.commando.freeze",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "52b43c30"
+    },
+    {
+      "id": "sprite.enemy.commando.hit",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "ce1195e0"
+    },
+    {
+      "id": "sprite.enemy.eye",
+      "width": 12,
+      "height": 12,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "df0ed098"
+    },
+    {
+      "id": "sprite.enemy.eye.freeze",
+      "width": 12,
+      "height": 12,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "dee81cc8"
+    },
+    {
+      "id": "sprite.enemy.eye.hit",
+      "width": 12,
+      "height": 12,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "e57fa1d0"
+    },
+    {
+      "id": "sprite.enemy.fortress",
+      "width": 12,
+      "height": 10,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "e426144a"
+    },
+    {
+      "id": "sprite.enemy.fortress.freeze",
+      "width": 12,
+      "height": 10,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "8bba636a"
+    },
+    {
+      "id": "sprite.enemy.fortress.hit",
+      "width": 12,
+      "height": 10,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "0f2ae3da"
+    },
+    {
+      "id": "sprite.enemy.gunner",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "62d20b08"
+    },
+    {
+      "id": "sprite.enemy.gunner.freeze",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "a6a68c20"
+    },
+    {
+      "id": "sprite.enemy.gunner.hit",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "582cb9f8"
+    },
+    {
+      "id": "sprite.enemy.mantis",
+      "width": 11,
+      "height": 10,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "3adcace1"
+    },
+    {
+      "id": "sprite.enemy.mantis.freeze",
+      "width": 11,
+      "height": 10,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "db4d4651"
+    },
+    {
+      "id": "sprite.enemy.mantis.hit",
+      "width": 11,
+      "height": 10,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "44a685a9"
+    },
+    {
+      "id": "sprite.enemy.shotman",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "1691d550"
+    },
+    {
+      "id": "sprite.enemy.shotman.freeze",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "6c282c30"
+    },
+    {
+      "id": "sprite.enemy.shotman.hit",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "3864ab60"
+    },
+    {
+      "id": "sprite.enemy.sniper",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "75bab3c8"
+    },
+    {
+      "id": "sprite.enemy.sniper.freeze",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "45632e80"
+    },
+    {
+      "id": "sprite.enemy.sniper.hit",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "75bab3c8"
+    },
+    {
+      "id": "sprite.enemy.stalker",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "4710e330"
+    },
+    {
+      "id": "sprite.enemy.stalker.freeze",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "52b43c30"
+    },
+    {
+      "id": "sprite.enemy.stalker.hit",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "ce1195e0"
+    },
+    {
+      "id": "sprite.enemy.tank",
+      "width": 10,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "4001643e"
+    },
+    {
+      "id": "sprite.enemy.tank.freeze",
+      "width": 10,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "287371b2"
+    },
+    {
+      "id": "sprite.enemy.tank.hit",
+      "width": 10,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "5c4c43aa"
+    },
+    {
+      "id": "sprite.enemy.zombie",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "b8340a70"
+    },
+    {
+      "id": "sprite.enemy.zombie.freeze",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "7e787840"
+    },
+    {
+      "id": "sprite.enemy.zombie.hit",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "8e6f5fe8"
+    },
+    {
+      "id": "sprite.module.turret",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "c0b321d0"
+    },
+    {
+      "id": "sprite.obstacle.box",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "e80ba580"
+    },
+    {
+      "id": "sprite.obstacle.tree",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "dcbe0980"
+    },
+    {
+      "id": "sprite.obstacle.wall.dungeon",
+      "width": 16,
+      "height": 16,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "c9274d80"
+    },
+    {
+      "id": "sprite.obstacle.wall.ruins",
+      "width": 16,
+      "height": 16,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "c027ccb8"
+    },
+    {
+      "id": "sprite.player.battle",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "af279e90"
+    },
+    {
+      "id": "sprite.player.battle.quad",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "695db890"
+    },
+    {
+      "id": "sprite.player.heavy",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "d3bb8b50"
+    },
+    {
+      "id": "sprite.player.heavy.quad",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "dd4707f0"
+    },
+    {
+      "id": "sprite.player.scout",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "f1020990"
+    },
+    {
+      "id": "sprite.player.scout.quad",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "bbd471e0"
+    },
+    {
+      "id": "sprite.rival.battle",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "dc902eb8"
+    },
+    {
+      "id": "sprite.rival.heavy",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "902da288"
+    },
+    {
+      "id": "sprite.rival.scout",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "a8cebe5c"
+    },
+    {
+      "id": "tile.ground.dungeon",
+      "width": 16,
+      "height": 16,
+      "anchor": [
+        0,
+        0
+      ],
+      "hash": "67b49ed5"
+    },
+    {
+      "id": "tile.ground.forest",
+      "width": 16,
+      "height": 16,
+      "anchor": [
+        0,
+        0
+      ],
+      "hash": "31a494d5"
+    },
+    {
+      "id": "tile.ground.ruins",
+      "width": 16,
+      "height": 16,
+      "anchor": [
+        0,
+        0
+      ],
+      "hash": "847be4d5"
+    }
+  ]
+}

@@ -1,9 +1,14 @@
+import { BALANCE } from '../config/balance.js';
 import { Cam, W } from '../core/runtime.js';
 import { Game } from '../game/Game.js';
 
 export const AudioSys = {
     ctx: null, master: null, musicNode: null, concussionNode: null, filter: null, track: null,
     nextNoteTime: 0, noteIndex: 0, isPlaying: false, timerID: null,
+    perfMs: 0,
+    resetPerfTime: function() { this.perfMs = 0; },
+    consumePerfTime: function() { const value = this.perfMs; this.perfMs = 0; return value; },
+    recordPerfTime: function(startedAt) { this.perfMs += performance.now() - startedAt; },
     init: function() {
         window.AudioContext = window.AudioContext || window.webkitAudioContext;
         this.ctx = new AudioContext();
@@ -18,8 +23,10 @@ export const AudioSys = {
     },
     updateFilter: function(hpPct) {
         if(!this.ctx) return;
+        const startedAt = performance.now();
         const target = hpPct < 0.2 ? 200 : 22000;
         this.filter.frequency.setTargetAtTime(target, this.ctx.currentTime, 1.0);
+        this.recordPerfTime(startedAt);
     },
     triggerConcussion: function() {
         if(!this.ctx) return;
@@ -36,6 +43,7 @@ export const AudioSys = {
     getPan: function(x) { if(!this.ctx || x==null) return 0; return Math.max(-1, Math.min(1, (x-Cam.x-W/2)/(W/2))); },
     playTone: function(freq, type, dur, vol=0.1, dest=null, x=null) {
         if(!this.ctx || !freq) return;
+        const startedAt = performance.now();
         const t=this.ctx.currentTime, osc=this.ctx.createOscillator(), g=this.ctx.createGain();
         osc.type=type; osc.frequency.setValueAtTime(freq,t);
         if(x!==null) {
@@ -48,9 +56,12 @@ export const AudioSys = {
         if(x !== null && this.ctx.createStereoPanner) { const p = this.ctx.createStereoPanner(); p.pan.value=this.getPan(x); g.connect(p); p.connect(dest||this.filter); }
         else { g.connect(dest||this.filter); }
         osc.start(t); osc.stop(t+dur);
+        this.recordPerfTime(startedAt);
     },
     playNoise: function(dur, vol=0.2, x=null) {
-        if(!this.ctx) return; const b=this.ctx.createBuffer(1,this.ctx.sampleRate*dur,this.ctx.sampleRate), d=b.getChannelData(0);
+        if(!this.ctx) return;
+        const startedAt = performance.now();
+        const b=this.ctx.createBuffer(1,this.ctx.sampleRate*dur,this.ctx.sampleRate), d=b.getChannelData(0);
         for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
         const s=this.ctx.createBufferSource(); s.buffer=b; const g=this.ctx.createGain();
         g.gain.value=vol; g.gain.exponentialRampToValueAtTime(0.01,this.ctx.currentTime+dur);
@@ -58,18 +69,73 @@ export const AudioSys = {
         if(x !== null && this.ctx.createStereoPanner) { const p = this.ctx.createStereoPanner(); p.pan.value=this.getPan(x); g.connect(p); p.connect(this.filter); }
         else { g.connect(this.filter); }
         s.start();
+        this.recordPerfTime(startedAt);
     },
     shoot: function(w, x) {
         if(w==='pistol') this.playTone(800,'square',0.05,0.1, null, x);
         else if(w==='shotgun') { this.playNoise(0.2,0.3, x); this.playTone(100,'sawtooth',0.15, null, null, x); }
         else if(w==='mg') this.playTone(400,'square',0.04,0.1, null, x);
-        else if(w==='rpg') { this.playTone(100,'sawtooth',0.4,0.3, null, x); this.playNoise(0.3,0.3, x); }
+        else if(w==='rpg') {
+            const f = BALANCE.WEAPONS.rpg.feel;
+            // Triangle + short noise — quieter thump than legacy sawtooth blast
+            this.playTone(90, 'triangle', f.shootToneDur, f.shootToneVol, null, x);
+            this.playNoise(f.shootNoiseDur, f.shootNoiseVol, x);
+        }
         else if(w==='laser') { this.playTone(1500,'sawtooth',0.1,0.1, null, x); this.playTone(200,'square',0.1,0.1, null, x); }
     },
     jetpack: function(x) { this.playNoise(0.15, 0.05, x); this.playTone(80, 'sawtooth', 0.15, 0.05, null, x); },
     dash: function(x) { this.playNoise(0.4, 0.2, x); this.playTone(60, 'sawtooth', 0.3, 0.2, null, x); },
     impact: function(x) { this.playNoise(0.4, 0.5, x); this.playTone(40, 'square', 0.3, 0.4, null, x); },
+    // Quiet background tick for bullets hitting map props (narrow hear radius ~220px)
+    obstacleHit: function(x, y) {
+        if(!this.ctx) return;
+        const startedAt = performance.now();
+        const maxR = 220;
+        let vol = 0.018;
+        if(Game.player && x != null) {
+            const px = Game.player.x + 16;
+            const py = Game.player.y + 16;
+            const d = Math.hypot(x - px, (y != null ? y : py) - py);
+            if(d > maxR) {
+                this.recordPerfTime(startedAt);
+                return;
+            }
+            const t = 1 - d / maxR;
+            vol *= t * t;
+        }
+        const t0 = this.ctx.currentTime;
+        const noiseDur = 0.05;
+        const b = this.ctx.createBuffer(1, Math.max(1, this.ctx.sampleRate * noiseDur), this.ctx.sampleRate);
+        const d = b.getChannelData(0);
+        for(let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        const src = this.ctx.createBufferSource(); src.buffer = b;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(vol, t0);
+        g.gain.exponentialRampToValueAtTime(0.001, t0 + noiseDur);
+        src.connect(g);
+        if(x != null && this.ctx.createStereoPanner) {
+            const p = this.ctx.createStereoPanner();
+            const center = Game.player ? Game.player.x + 16 : Cam.x + W / 2;
+            p.pan.value = Math.max(-1, Math.min(1, (x - center) / 180));
+            g.connect(p); p.connect(this.filter);
+        } else {
+            g.connect(this.filter);
+        }
+        src.start(t0);
+        const osc = this.ctx.createOscillator(), og = this.ctx.createGain();
+        osc.type = 'triangle'; osc.frequency.setValueAtTime(110, t0);
+        og.gain.setValueAtTime(vol * 0.7, t0);
+        og.gain.exponentialRampToValueAtTime(0.001, t0 + 0.04);
+        osc.connect(og); og.connect(this.filter);
+        osc.start(t0); osc.stop(t0 + 0.04);
+        this.recordPerfTime(startedAt);
+    },
     boom: function(x) { this.playNoise(0.6,0.5, x); this.playTone(50,'triangle',0.7, null, null, x); },
+    rpgBoom: function(x) {
+        const f = BALANCE.WEAPONS.rpg.feel;
+        this.playNoise(f.boomNoiseDur, f.boomNoiseVol, x);
+        this.playTone(50, 'triangle', f.boomToneDur, f.boomToneVol, null, x);
+    },
     power: function() { this.playTone(600,'sine',0.3); setTimeout(()=>this.playTone(1200,'sine',0.3),100); },
     // NEW SOUNDS FOR MODULES
     moduleDeploy: function() { this.playTone(300, 'square', 0.1); this.playTone(600, 'square', 0.1); },

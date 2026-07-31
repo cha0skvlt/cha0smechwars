@@ -55,6 +55,30 @@
                 <div class="mech-jet-container"><div id="mech-jet" class="mech-jet-fill"></div></div>
             </div>
         </div>
+
+        <div class="progression-hud">
+            <div class="progression-label">
+                <span id="player-level">LEVEL 1</span>
+                <span id="xp-value">0 / 26 XP</span>
+            </div>
+            <div class="xp-track"><div id="xp-fill" class="xp-fill"></div></div>
+            <div id="level-up-overlay" class="level-up-overlay hidden">
+                <div class="upgrade-cards">
+                    <div id="upgrade-choice-0" class="upgrade-card">
+                        <span class="upgrade-key">[1]</span>
+                        <span class="upgrade-tag"></span>
+                    </div>
+                    <div id="upgrade-choice-1" class="upgrade-card">
+                        <span class="upgrade-key">[2]</span>
+                        <span class="upgrade-tag"></span>
+                    </div>
+                    <div id="upgrade-choice-2" class="upgrade-card">
+                        <span class="upgrade-key">[3]</span>
+                        <span class="upgrade-tag"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div id="start-screen">
@@ -67,10 +91,38 @@
         <div class="class-container">
             <div class="mech-card" data-type="battle" data-class="battle"><h2>BATTLE</h2><canvas id="preview-battle" class="mech-preview"></canvas><div class="stat-row"><span>HP</span><div class="stat-bar"><div class="stat-fill" style="width: 66%; background:#00eaff"></div></div></div><div class="stat-row"><span>SPD</span><div class="stat-bar"><div class="stat-fill" style="width: 80%; background:#eb2"></div></div></div><div class="stat-row"><span>SHLD</span><div class="stat-bar"><div class="stat-fill" style="width: 50%; background:#0ff"></div></div></div><div class="ability">[SPACE] JETPACK</div><div class="desc">Balanced MK.I chassis. Medium Regen. Reliable.</div></div>
             <div class="mech-card" data-type="heavy" data-class="heavy"><h2>HEAVY</h2><canvas id="preview-heavy" class="mech-preview"></canvas><div class="stat-row"><span>HP</span><div class="stat-bar"><div class="stat-fill" style="width: 100%; background:#f90"></div></div></div><div class="stat-row"><span>SPD</span><div class="stat-bar"><div class="stat-fill" style="width: 50%; background:#eb2"></div></div></div><div class="stat-row"><span>SHLD</span><div class="stat-bar"><div class="stat-fill" style="width: 100%; background:#0ff"></div></div></div><div class="ability">[SPACE] RAM DASH</div><div class="desc">High armor. Medium Shield Regen. Explosive Dash.</div></div>
-            <div class="mech-card" data-type="scout" data-class="scout"><h2>SCOUT</h2><canvas id="preview-scout" class="mech-preview"></canvas><div class="stat-row"><span>HP</span><div class="stat-bar"><div class="stat-fill" style="width: 50%; background:#0f0"></div></div></div><div class="stat-row"><span>SPD</span><div class="stat-bar"><div class="stat-fill" style="width: 100%; background:#eb2"></div></div></div><div class="stat-row"><span>SHIELD</span><div class="stat-bar"><div class="stat-fill" style="width: 30%; background:#0ff"></div></div></div><div class="ability">[SPACE] TURBO JETS</div><div class="desc">Fragile (Max Shield 3). 3x Fuel. 2x Flight speed. Hit and run.</div></div>
+            <div class="mech-card" data-type="scout" data-class="scout"><h2>SCOUT</h2><canvas id="preview-scout" class="mech-preview"></canvas><div class="stat-row"><span>HP</span><div class="stat-bar"><div class="stat-fill" style="width: 50%; background:#0f0"></div></div></div><div class="stat-row"><span>SPD</span><div class="stat-bar"><div class="stat-fill" style="width: 100%; background:#eb2"></div></div></div><div class="stat-row"><span>SHIELD</span><div class="stat-bar"><div class="stat-fill" style="width: 33%; background:#0ff"></div></div></div><div class="ability">[SPACE] TURBO JETS</div><div class="desc">Fragile (Max Shield 4). 3x Fuel. 2x Flight speed. Hit and run.</div></div>
         </div>
     </div>
-    <div id="game-over-screen" class="hidden"><h1 style="color: #f00;">CRITICAL<br>FAILURE</h1><div style="margin-bottom: 10px; font-size: 20px; color: #f90;" id="death-reason"></div><div style="margin-bottom: 30px; font-size: 24px;">SCORE: <span class="text-highlight" id="final-score">0</span></div><button class="btn" id="reboot-btn">REBOOT</button></div>
+    <div id="game-over-screen" class="hidden">
+        <h1 style="color: #f00;">CRITICAL<br>FAILURE</h1>
+        <div id="death-reason" class="go-reason">SYSTEM COLLAPSE</div>
+        <div class="go-score-row">
+            SCORE: <span class="text-highlight" id="final-score">0</span>
+            <span id="go-rank-badge" class="go-rank-badge hidden"></span>
+        </div>
+        <div class="go-meta">
+            <span id="go-wave">WAVE 1</span>
+            <span id="go-class">—</span>
+            <span id="go-biome">—</span>
+            <span>RIVAL <span class="text-highlight" id="go-rival">0</span></span>
+        </div>
+        <div class="go-kills">
+            <div class="go-kill-block">
+                <div class="go-kill-head">YOU: <span class="text-highlight" id="go-you-total">0</span></div>
+                <div class="go-kill-list" id="go-you-kills">—</div>
+            </div>
+            <div class="go-kill-block">
+                <div class="go-kill-head go-bot-head">BOT: <span class="text-highlight" id="go-bot-total">0</span></div>
+                <div class="go-kill-list" id="go-bot-kills">—</div>
+            </div>
+        </div>
+        <div class="go-hs">
+            <div class="go-hs-title">HIGH SCORES</div>
+            <div id="go-highscores" class="go-hs-list"></div>
+        </div>
+        <button class="btn" id="reboot-btn">REBOOT</button>
+    </div>
     <div id="error-screen"><h1 style="color: #f00; font-size: 30px;">SYSTEM ERROR</h1><div id="error-msg" style="color: #fff; font-family: monospace; font-size: 12px; max-width: 80%;"></div></div>
     <canvas id="game"></canvas>
 </div>

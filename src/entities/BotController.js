@@ -1,6 +1,8 @@
 import { BALANCE } from '../config/balance.js';
 import { Cam, Input } from '../core/runtime.js';
 import { Game } from '../game/Game.js';
+import { isHostile } from '../combat/damage.js';
+import { botTargetCandidates, ownerFollowState } from './botTactics.js';
 
 // @meta:BotController - AI controller for bot player - handles movement, targeting, and module usage
 export class BotController {
@@ -18,7 +20,7 @@ export class BotController {
         let avoidVec = {x:0, y:0};
         for(let i=0; i<Game.bullets.length; i++) {
             let b = Game.bullets[i];
-            if (b.bot || b.dead) continue;
+            if (!isHostile(b.source, this.p) || b.dead) continue;
             const dx = b.x - center.x, dy = b.y - center.y;
             const dSq = dx*dx + dy*dy;
             if (dSq < BALANCE.BOT_AVOID_RADIUS_SQ) {
@@ -51,8 +53,7 @@ export class BotController {
             if (score > maxScore) { maxScore = score; lootTarget = pow; }
         }
         let enemyTarget = null; let minDistSq = 9999999;
-        const potentialTargets = [...Game.enemies];
-        if (Game.player && !Game.player.flying && !Game.playerDead) potentialTargets.push(Game.player);
+        const potentialTargets = botTargetCandidates(this.p, Game.getDamageableTargets());
         for(let i=0; i<potentialTargets.length; i++) {
             let e = potentialTargets[i];
             const dx = e.x - center.x, dy = e.y - center.y;
@@ -61,6 +62,7 @@ export class BotController {
         }
         // Only calculate sqrt when actually needed for distance-based logic
         const minDist = enemyTarget ? Math.sqrt(minDistSq) : 9999;
+        const follow = ownerFollowState(this.p, this.p.owner);
 
         // BOT MODULE USAGE
         this.modCheckTimer++;
@@ -81,7 +83,11 @@ export class BotController {
         }
 
         let finalVx = 0; let finalVy = 0;
-        if (this.p.hp < this.p.maxHp * 0.3) {
+        if (follow.mustFollow) {
+            finalVx = follow.vector.x;
+            finalVy = follow.vector.y;
+        }
+        else if (this.p.hp < this.p.maxHp * 0.3) {
             if (lootTarget && lootTarget.t === 'repair') { this.moveTo(lootTarget, center); }
             else { if (enemyTarget) { const ang = Math.atan2(center.y - enemyTarget.y, center.x - enemyTarget.x); finalVx = Math.cos(ang); finalVy = Math.sin(ang); } }
         }
@@ -100,6 +106,10 @@ export class BotController {
             if (dist > desiredDist + 50) { finalVx = Math.cos(angToEnemy); finalVy = Math.sin(angToEnemy); if (this.p.wep === 'shotgun' && dist > 200) this.input.space = true; }
             else if (dist < desiredDist - 50) { finalVx = -Math.cos(angToEnemy); finalVy = -Math.sin(angToEnemy); }
             else { this.changeDirTimer++; if (this.changeDirTimer > 60) { this.strafeDir *= -1; this.changeDirTimer = 0; } finalVx = Math.cos(angToEnemy + Math.PI/2) * this.strafeDir; finalVy = Math.sin(angToEnemy + Math.PI/2) * this.strafeDir; }
+        }
+        else if(follow.shouldFollow) {
+            finalVx = follow.vector.x;
+            finalVy = follow.vector.y;
         }
         finalVx += avoidVec.x * 2.0; finalVy += avoidVec.y * 2.0;
         if (center.x < 100) finalVx += 1; if (center.x > 2900) finalVx -= 1;
