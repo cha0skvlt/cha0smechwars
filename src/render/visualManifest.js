@@ -39,14 +39,20 @@ const bitmap = (id, mask, color, category, options = {}) => Object.freeze({
 
 const bitmapAssets = [
     bitmap('sprite.player.battle', BASE_MASKS.soldier, '#00eaff', 'actor'),
+    bitmap('sprite.player.battle.hit', BASE_MASKS.soldier, '#ffffff', 'actor'),
     bitmap('sprite.player.battle.quad', BASE_MASKS.soldier, '#ff00ff', 'actor'),
     bitmap('sprite.player.heavy', BASE_MASKS.heavy, '#00eaff', 'actor'),
+    bitmap('sprite.player.heavy.hit', BASE_MASKS.heavy, '#ffffff', 'actor'),
     bitmap('sprite.player.heavy.quad', BASE_MASKS.heavy, '#ff00ff', 'actor'),
     bitmap('sprite.player.scout', BASE_MASKS.scout, '#00eaff', 'actor'),
+    bitmap('sprite.player.scout.hit', BASE_MASKS.scout, '#ffffff', 'actor'),
     bitmap('sprite.player.scout.quad', BASE_MASKS.scout, '#ff00ff', 'actor'),
     bitmap('sprite.rival.battle', BASE_MASKS.soldier, '#ff0000', 'actor'),
+    bitmap('sprite.rival.battle.hit', BASE_MASKS.soldier, '#ffffff', 'actor'),
     bitmap('sprite.rival.heavy', BASE_MASKS.heavy, '#ff0000', 'actor'),
+    bitmap('sprite.rival.heavy.hit', BASE_MASKS.heavy, '#ffffff', 'actor'),
     bitmap('sprite.rival.scout', BASE_MASKS.scout, '#ff0000', 'actor'),
+    bitmap('sprite.rival.scout.hit', BASE_MASKS.scout, '#ffffff', 'actor'),
 ];
 
 const enemies = [
@@ -163,6 +169,7 @@ const dynamic = [
     ['pickup.freeze', 'pickup', 'pickup'],
     ['pickup.mine', 'pickup', 'pickup'],
     ['pickup.shield', 'pickup', 'pickup'],
+    ['pickup.resurrect', 'pickup', 'pickup'],
     ['pickup.turret', 'pickup', 'pickup'],
     ['pickup.warp', 'pickup', 'pickup'],
     ['pickup.emp', 'pickup', 'pickup'],

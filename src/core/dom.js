@@ -2,8 +2,17 @@
 export const DOM = {
     show: (id) => { const el = document.getElementById(id); if(el) el.classList.remove('hidden'); },
     hide: (id) => { const el = document.getElementById(id); if(el) el.classList.add('hidden'); },
-    hideAll: () => { DOM.hide('start-screen'); DOM.hide('class-select-screen'); DOM.hide('game-over-screen'); DOM.hide('ui-layer'); },
+    hideAll: () => { DOM.hide('start-screen'); DOM.hide('lance-hub-screen'); DOM.hide('contract-briefing-screen'); DOM.hide('game-over-screen'); DOM.hide('ui-layer'); },
     glitch: () => { const ui = document.getElementById('ui-layer'); ui.classList.add('glitch-active'); setTimeout(()=>ui.classList.remove('glitch-active'), 200); },
+    showKillFeed: (text, count) => {
+        const el = document.getElementById('kill-feed-msg');
+        if(!el) return;
+        el.querySelector('.kill-feed-text').textContent = text;
+        el.querySelector('.kill-feed-count').textContent = `MECHS DESTROYED: ${count}`;
+        el.classList.remove('hidden');
+        el.classList.remove('kill-feed-anim'); void el.offsetWidth; el.classList.add('kill-feed-anim');
+    },
+    hideKillFeed: () => DOM.hide('kill-feed-msg'),
     updateProgression: (level, xp, nextXp) => {
         const levelEl = document.getElementById('player-level');
         const valueEl = document.getElementById('xp-value');

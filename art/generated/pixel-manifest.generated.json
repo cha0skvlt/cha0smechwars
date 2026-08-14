@@ -374,6 +374,16 @@
       "hash": "af279e90"
     },
     {
+      "id": "sprite.player.battle.hit",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "ce1195e0"
+    },
+    {
       "id": "sprite.player.battle.quad",
       "width": 8,
       "height": 8,
@@ -392,6 +402,16 @@
         1
       ],
       "hash": "d3bb8b50"
+    },
+    {
+      "id": "sprite.player.heavy.hit",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "1c30b380"
     },
     {
       "id": "sprite.player.heavy.quad",
@@ -414,6 +434,16 @@
       "hash": "f1020990"
     },
     {
+      "id": "sprite.player.scout.hit",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "adfb6be8"
+    },
+    {
       "id": "sprite.player.scout.quad",
       "width": 8,
       "height": 8,
@@ -434,6 +464,16 @@
       "hash": "dc902eb8"
     },
     {
+      "id": "sprite.rival.battle.hit",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "ce1195e0"
+    },
+    {
       "id": "sprite.rival.heavy",
       "width": 8,
       "height": 8,
@@ -444,6 +484,16 @@
       "hash": "902da288"
     },
     {
+      "id": "sprite.rival.heavy.hit",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "1c30b380"
+    },
+    {
       "id": "sprite.rival.scout",
       "width": 8,
       "height": 8,
@@ -452,6 +502,16 @@
         1
       ],
       "hash": "a8cebe5c"
+    },
+    {
+      "id": "sprite.rival.scout.hit",
+      "width": 8,
+      "height": 8,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "hash": "adfb6be8"
     },
     {
       "id": "tile.ground.dungeon",

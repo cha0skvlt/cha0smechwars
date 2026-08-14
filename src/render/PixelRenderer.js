@@ -13,6 +13,7 @@ const PICKUPS = Object.freeze({
     freeze: { id: 'pickup.freeze', char: 'Z', color: '#60f' },
     mine: { id: 'pickup.mine', char: 'M', color: '#f00' },
     shield: { id: 'pickup.shield', char: 'O', color: '#00eaff' },
+    resurrect: { id: 'pickup.resurrect', char: 'V', color: '#0f0' },
     turret: { id: 'pickup.turret', char: 'E', color: '#0ff' },
     warp: { id: 'pickup.warp', char: 'E', color: '#0ff' },
     emp: { id: 'pickup.emp', char: 'E', color: '#0ff' },

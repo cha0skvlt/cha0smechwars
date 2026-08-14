@@ -1,7 +1,13 @@
 @import './style.tokens.generated.css';
 
+/* Custom cursor - cyan arrow matching the HUD palette (glow via feDropShadow, same intent as the
+   box-shadow glow on .stat-box/.btn/etc), dark outline so it still reads over bright UI/terrain. */
+:root {
+    --cursor-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cfilter id='g' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeDropShadow dx='0' dy='0' stdDeviation='1' flood-color='%2300eaff' flood-opacity='0.9'/%3E%3C/filter%3E%3Cpath d='M2 2 L2 22 L8 14 L19 16 Z' fill='%2300eaff' stroke='%23001820' stroke-width='1.6' stroke-linejoin='round' filter='url(%23g)'/%3E%3C/svg%3E") 2 2;
+}
+
 /* CORE STYLES */
-        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Press Start 2P', cursive; user-select: none; cursor: crosshair; color: var(--art-white); }
+        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Press Start 2P', cursive; user-select: none; cursor: var(--cursor-arrow), auto; color: var(--art-white); }
         #game-container { position: relative; width: 100vw; height: 100vh; box-shadow: inset 0 0 100px rgba(0,0,0,0.9); }
         #game-container::after { content: " "; display: block; position: absolute; top: 0; left: 0; bottom: 0; right: 0; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 255, 255, 0.02) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03)); background-size: 100% var(--art-scanline), 6px 100%; pointer-events: none; z-index: 30; opacity: 0.6; }
         canvas { display: block; image-rendering: pixelated; }
@@ -33,14 +39,22 @@
         .hp-label { font-size: 10px; color: #00eaff; margin-bottom: 4px; letter-spacing: 2px; text-shadow: 0 0 5px #00eaff; }
         .mech-hp-container { width: 300px; height: 24px; border: 2px solid #00eaff; background: #001020; position: relative; box-shadow: 0 0 15px #00eaff; transform: skewX(-15deg); overflow: hidden; margin-bottom: 5px; }
         .mech-hp-fill { height: 100%; background: linear-gradient(90deg, #00eaff, #0088aa); width: 100%; transition: width 0.1s; }
+        /* Numeric readout centered over a bar. mech-hp-container is skewX(-15deg) - counter-skew
+           just that one so the digits render upright; boss-container isn't skewed, so it's left alone. */
+        .bar-value { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; text-shadow: 1px 1px 0 #000, 0 0 4px #000; letter-spacing: 1px; pointer-events: none; }
+        .mech-hp-container .bar-value { transform: skewX(15deg); }
+        .jet-row { display: flex; align-items: center; gap: 8px; }
         .mech-jet-container { width: 250px; height: 10px; border: 1px solid #555; background: #111; transform: skewX(-15deg); overflow: hidden; display: block; }
         .mech-jet-fill { height: 100%; background: #f90; width: 100%; transition: width 0.1s; }
+        .jet-value { font-size: 9px; color: #ccc; }
         .hp-row { display: flex; align-items: center; }
-        .shield-circle { width: 36px; height: 36px; border-radius: 50%; border: 3px solid #fff; background: rgba(0, 255, 255, 0.5); color: #fff; display: none; justify-content: center; align-items: center; font-size: 16px; font-weight: bold; margin-left: 15px; box-shadow: 0 0 15px #00eaff; animation: pulse 1s infinite; }
+        .shield-circle { width: 40px; height: 40px; border-radius: 50%; border: 3px solid #fff; background: rgba(0, 255, 255, 0.5); color: #fff; display: none; justify-content: center; align-items: center; font-size: 9px; font-weight: bold; margin-left: 15px; box-shadow: 0 0 15px #00eaff; animation: pulse 1s infinite; }
 
         /* PROGRESSION */
-        .progression-hud { position: absolute; top: 92px; left: 30px; width: min(360px, calc(100vw - 60px)); color: #00eaff; text-shadow: 2px 2px 0 #000; z-index: 14; }
+        .progression-hud { position: absolute; top: 30px; left: 30px; width: min(360px, calc(100vw - 60px)); color: #00eaff; text-shadow: 2px 2px 0 #000; z-index: 14; }
         .progression-label { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 10px; letter-spacing: 1px; }
+        .hud-ce { color: #789; }
+        .hud-ce .text-highlight { color: #fff; }
         #xp-value { color: #fff; }
         .xp-track { height: 10px; border: 1px solid #00eaff; background: rgba(0, 16, 28, 0.9); overflow: hidden; transform: skewX(-15deg); box-shadow: 0 0 8px rgba(0, 234, 255, 0.4); }
         .xp-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00eaff, #bf0); transition: width 0.15s; }
@@ -68,7 +82,7 @@
 
         @media (max-width: 760px) {
             #ui-layer { padding: 14px; }
-            .progression-hud { top: 82px; left: 14px; width: min(300px, calc(100vw - 28px)); }
+            .progression-hud { top: 20px; left: 14px; width: min(300px, calc(100vw - 28px)); }
             .upgrade-cards { gap: 4px; }
             .upgrade-card { height: 28px; padding: 0 8px; gap: 8px; }
             .upgrade-key { font-size: 10px; }
@@ -82,11 +96,18 @@
         @keyframes bossDeathAnim { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); } 20% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); } 40% { transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); } }
 
         /* MENUS */
-        #start-screen, #game-over-screen, #error-screen, #class-select-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 10, 15, 0.98); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; border: 20px solid #111; box-sizing: border-box; }
-        #game-over-screen { justify-content: flex-start; padding: 40px 24px 32px; overflow-y: auto; }
-        #game-over-screen h1 { font-size: 48px; margin-bottom: 16px; }
-        .go-reason { margin-bottom: 12px; font-size: 16px; color: #f90; text-align: center; text-shadow: 1px 1px 0 #000; min-height: 1.2em; }
+        #start-screen, #game-over-screen, #error-screen, #class-select-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 10, 15, 0.98); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; border: 20px solid #111; box-sizing: border-box; overflow: hidden; }
+        #game-over-screen { padding: 40px 24px 32px; }
+        /* Menu screens must always fit the viewport with zero scrollbars at any resolution -
+           fitScale.js measures each screen's real (unscaled) content box and shrinks it with
+           transform:scale() to fit, instead of relying on a fixed breakpoint or letting it scroll.
+           Flex column + align-items:center reproduces exactly how the screen itself used to center
+           its direct children (each one independently, regardless of its own width) - a plain
+           block wrapper would left-align any child narrower than the widest sibling instead. */
+        .fit-scale { display: flex; flex-direction: column; align-items: center; transform-origin: center; }
+        .go-reason { margin-bottom: 12px; font-size: 32px; color: #f90; text-align: center; text-shadow: 1px 1px 0 #000; min-height: 1.2em; }
         .go-score-row { margin-bottom: 14px; font-size: 22px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center; }
+        .go-score-label { font-size: 14px; color: #789; letter-spacing: 1px; }
         .go-rank-badge { font-size: 12px; color: #000; background: #00eaff; padding: 6px 10px; border: 2px solid #fff; box-shadow: 0 0 12px rgba(0,234,255,0.6); letter-spacing: 1px; }
         .go-meta { display: flex; flex-wrap: wrap; gap: 12px 20px; justify-content: center; font-size: 11px; color: #888; margin-bottom: 18px; letter-spacing: 1px; }
         .go-meta span { color: #ccc; }
@@ -104,14 +125,15 @@
         .hs-empty { text-align: center; color: #555; }
         #error-screen { display: none; z-index: 100; border-color: #f00; }
         h1 { font-size: 60px; color: #00eaff; text-shadow: 0 0 15px #00eaff; margin-bottom: 40px; text-align: center; line-height: 1.2; }
-        .btn { background: #000; color: #00eaff; border: 4px solid #00eaff; padding: 20px 50px; font-size: 24px; cursor: pointer; font-family: inherit; text-transform: uppercase; transition: all 0.1s; box-shadow: 0 0 20px rgba(0,234,255,0.5); }
+        .btn { background: #000; color: #00eaff; border: 4px solid #00eaff; padding: 20px 50px; font-size: 24px; cursor: var(--cursor-arrow), pointer; font-family: inherit; text-transform: uppercase; transition: all 0.1s; box-shadow: 0 0 20px rgba(0,234,255,0.5); }
         .btn:hover { background: #00eaff; color: #000; transform: scale(1.05); box-shadow: 0 0 40px rgba(0,234,255,0.8); }
         .info-text { margin-top: 40px; color: #aaa; font-size: 12px; line-height: 2.2; text-align: center; text-shadow: 1px 1px 0 #000; }
+        .info-text-divider { display: inline-block; margin: 10px 0 4px; font-size: 9px; color: #567; letter-spacing: 4px; }
         .pause-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; font-size: 60px; color: #00eaff; text-shadow: 0 0 20px #00eaff; z-index: 15; }
-        .biome-alert { position: absolute; top: 40%; width: 100%; text-align: center; font-size: 60px; color: #fff; text-shadow: 0 0 20px #00eaff; animation: fadeOut 4s forwards; pointer-events: none; z-index: 12; letter-spacing: 10px;}
+        .biome-alert { position: absolute; top: 90px; width: 100%; text-align: center; font-size: 22px; color: #fff; text-shadow: 0 0 12px #00eaff; animation: fadeOut 4s forwards; pointer-events: none; z-index: 12; letter-spacing: 6px;}
         #class-select-screen { z-index: 25; display: flex; background: radial-gradient(circle at center, #051015 0%, #000 100%); }
         .class-container { display: flex; gap: 40px; justify-content: center; align-items: stretch; z-index: 2; }
-        .mech-card { border: 2px solid #333; background: rgba(0,15,25,0.85); width: 300px; padding: 25px; display: flex; flex-direction: column; align-items: center; cursor: pointer; position: relative; overflow: hidden; transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s; animation: slideUp 0.5s ease-out forwards; opacity: 0; }
+        .mech-card { border: 2px solid #333; background: rgba(0,15,25,0.85); width: 300px; padding: 25px; display: flex; flex-direction: column; align-items: center; cursor: var(--cursor-arrow), pointer; position: relative; overflow: hidden; transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s; animation: slideUp 0.5s ease-out forwards; opacity: 0; }
         .mech-card:nth-child(1) { animation-delay: 0.1s; } .mech-card:nth-child(2) { animation-delay: 0.2s; } .mech-card:nth-child(3) { animation-delay: 0.3s; }
         .mech-card:hover { transform: translateY(-15px) scale(1.02); z-index: 10; }
         .mech-card[data-type="battle"]:hover { border-color: #00eaff; box-shadow: 0 0 40px rgba(0, 234, 255, 0.3); }
@@ -132,3 +154,140 @@
         @keyframes pulse { 0% {transform:scale(1);} 50% {transform:scale(1.1);} 100% {transform:scale(1);} }
         @keyframes shimmer { 0% {text-shadow: 0 0 5px #60f;} 50% {text-shadow: 0 0 20px #fff;} 100% {text-shadow: 0 0 5px #60f;} }
         @keyframes fadeOut { 0% {opacity:1; transform:scale(1);} 80% {opacity:1; transform:scale(1.1);} 100% {opacity:0; transform:scale(1.2);} }
+
+        /* ==================== v8 LANCE UPDATE UI ==================== */
+
+        /* Lance strip - 3 mini indicators above the main armor bar */
+        .lance-strip { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; pointer-events: none; }
+        .lance-mini-row { display: flex; align-items: center; gap: 6px; }
+        .lance-mini-kills { display: flex; gap: 2px; flex-wrap: wrap; max-width: 64px; }
+        .lance-mini-skull { font-size: 12px; filter: drop-shadow(0 0 3px #0ff) grayscale(1) brightness(2); }
+        .lance-mini { display: flex; align-items: center; gap: 6px; background: rgba(0, 20, 30, 0.85); border: 2px solid #335; padding: 4px 8px; clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); min-width: 112px; transition: border-color 0.2s, box-shadow 0.2s; }
+        .lance-mini.active { border-color: #00eaff; box-shadow: 0 0 10px rgba(0,234,255,0.5); }
+        .lance-mini.dead { border-color: #500; opacity: 0.5; }
+        .lance-mini-icon { width: 28px; height: 28px; flex-shrink: 0; image-rendering: pixelated; }
+        .lance-mini-info { display: flex; flex-direction: column; gap: 2px; }
+        .lance-mini-armor { font-size: 9px; color: #ccc; letter-spacing: 0.5px; }
+        .lance-mini-hp { font-size: 8px; color: #7cd; letter-spacing: 0.5px; margin-top: 1px; }
+        .lance-mini-xp-row { display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+        .lance-mini-xp-track { width: 48px; height: 4px; background: #001020; border: 1px solid #044; overflow: hidden; }
+        .lance-mini-xp-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #00eaff, #bf0); }
+        .lance-mini-xp-value { font-size: 7px; color: #789; white-space: nowrap; }
+        .lance-hint { font-size: 9px; color: #789; letter-spacing: 1px; margin-bottom: 10px; }
+
+        /* Kill feed banner */
+        .kill-feed-msg { position: absolute; top: 90px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 13; pointer-events: none; }
+        .kill-feed-text { font-size: 16px; color: #f66; text-shadow: 0 0 12px #f00, 2px 2px 0 #000; letter-spacing: 3px; }
+        .kill-feed-count { font-size: 9px; color: #ccc; margin-top: 4px; letter-spacing: 1px; }
+        .kill-feed-anim { animation: killFeedAnim 1.5s ease-out; }
+        @keyframes killFeedAnim { 0% { opacity: 0; transform: translateX(-50%) translateY(-10px); } 15% { opacity: 1; transform: translateX(-50%) translateY(0); } 80% { opacity: 1; } 100% { opacity: 0; } }
+
+        /* Lance Hub (composition + shop) + Contract Briefing shared chrome - overflow:hidden
+           because fitScale.js guarantees the .fit-scale content always shrinks to fit instead of
+           needing to scroll (see .fit-scale above and src/core/fitScale.js). */
+        #lance-hub-screen, #contract-briefing-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 10, 15, 0.98); z-index: 25; border: 20px solid #111; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px 0; }
+        .hub-title { font-size: 30px; margin-bottom: 16px; }
+        .hub-header { width: min(1100px, 94%); display: flex; flex-direction: column; align-items: center; }
+        .hub-wallet-row { display: flex; gap: 16px; margin-bottom: 10px; }
+        .hub-mission-result { width: 100%; text-align: center; font-size: 12px; color: #bf0; border: 1px solid #364; padding: 10px; margin-bottom: 16px; background: rgba(0,40,10,0.3); letter-spacing: 1px; }
+        .hub-mission-result.loss { color: #f66; border-color: #533; background: rgba(40,0,0,0.3); }
+        .hub-body { width: min(1100px, 94%); display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+        .hub-column { flex: 1 1 420px; min-width: 320px; }
+        /* Positioned so hub.js can read the shop panel's offsetTop relative to this column alone
+           (tab buttons + margin), not the whole page, when sizing the panel to reach DEPLOY's
+           bottom edge (see syncShopPanelHeight in hub.js). */
+        .hub-column-shop { position: relative; }
+        .hub-section-title { font-size: 11px; color: #789; letter-spacing: 3px; margin: 16px 0 8px; }
+        /* Chassis cards and their lance slots below share one grid: same column count, same gap,
+           same box-sizing, so a card and the slot under it always line up and match width. */
+        .hub-class-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .hub-mini-card { box-sizing: border-box; width: auto; padding: 10px; cursor: var(--cursor-arrow), pointer; }
+        .hub-mini-card h2 { font-size: 13px; margin: 4px 0; }
+        .hub-mini-card .mech-preview { width: 64px; height: 64px; margin: 8px; }
+        .hub-mini-card .stat-bar { width: auto; flex: 1; margin: 0 6px; }
+        .hub-mini-card .stat-value { font-size: 9px; color: #ccc; min-width: 20px; text-align: right; }
+        .hub-mini-card .ability { font-size: 8px; padding: 3px 6px; margin-top: 8px; }
+        .hub-mini-card .desc { font-size: 9px; height: auto; margin-top: 8px; padding-top: 8px; }
+        .hub-mini-card.selected { border-color: #0f0; box-shadow: 0 0 20px rgba(0,255,0,0.3); }
+        .hub-slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+        .hub-slot { box-sizing: border-box; min-height: 70px; border: 2px dashed #345; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; color: #567; cursor: var(--cursor-arrow), pointer; text-align: center; padding: 8px; letter-spacing: 1px; }
+        .hub-slot.filled { border-style: solid; border-color: #00eaff; color: #fff; box-shadow: 0 0 12px rgba(0,234,255,0.3); }
+        .hub-slot-class { font-size: 12px; color: #0ff; margin-bottom: 4px; }
+        .hub-slot-upgrades { font-size: 8px; color: #888; margin-top: 4px; line-height: 1.5; }
+        .hub-deploy-btn { width: 100%; padding: 14px; font-size: 16px; }
+        .hub-deploy-btn:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
+        .hub-deploy-btn:disabled:hover { background: #000; color: #00eaff; transform: none; }
+
+        .hub-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+        .hub-tab { flex: 1; background: #001018; color: #789; border: 2px solid #345; padding: 8px; font-family: inherit; font-size: 10px; letter-spacing: 2px; cursor: var(--cursor-arrow), pointer; }
+        .hub-tab.active { color: #0ff; border-color: #0ff; box-shadow: 0 0 10px rgba(0,234,255,0.3); }
+        /* Fixed height, own scrollbar - the shop list's length depends on which chassis are picked
+           (each class unlocks its own upgrade rows), so if this box grew/shrank with the content it
+           would drag fitScale's measured size around with it and the whole hub would visibly jump
+           in scale every time the player swaps a mech. Capping it here keeps the hub's overall size
+           tied to the viewport only, and the list scrolls internally instead. */
+        .hub-tab-panel { display: flex; flex-direction: column; gap: 14px; height: 62vh; overflow-y: scroll; padding-right: 10px; scrollbar-gutter: stable; }
+        .hub-tab-panel::-webkit-scrollbar { width: 8px; }
+        .hub-tab-panel::-webkit-scrollbar-track { background: rgba(0,15,25,0.6); border: 1px solid #223; }
+        .hub-tab-panel::-webkit-scrollbar-thumb { background: #0ff; border-radius: 0; box-shadow: 0 0 6px rgba(0,234,255,0.5); }
+        .hub-tab-panel::-webkit-scrollbar-thumb:hover { background: #7ff; }
+        .hub-tab-panel { scrollbar-width: thin; scrollbar-color: #0ff rgba(0,15,25,0.6); }
+
+        .shop-slot-group { border-top: 1px solid #223; padding-top: 10px; }
+        .shop-slot-group-title { font-size: 10px; color: #0ff; letter-spacing: 2px; margin-bottom: 8px; }
+        .shop-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 2px solid #345; background: rgba(0,15,25,0.8); padding: 8px 10px; margin-bottom: 6px; clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); cursor: var(--cursor-arrow), pointer; }
+        .shop-item-info { display: flex; flex-direction: column; gap: 2px; }
+        .shop-item-title { font-size: 10px; color: #fff; letter-spacing: 1px; }
+        .shop-item-tag { font-size: 9px; color: #888; }
+        .shop-item-cost { font-size: 11px; color: #ea9e22; white-space: nowrap; }
+        .shop-item.owned { border-color: #0f0; opacity: 0.6; cursor: var(--cursor-arrow), default; }
+        .shop-item.reselectable { opacity: 0.85; cursor: var(--cursor-arrow), pointer; border-color: #0f0; border-style: dashed; }
+        .shop-item.reselectable:hover { opacity: 1; box-shadow: 0 0 10px rgba(0,255,0,0.3); }
+        .shop-item.reselectable .shop-item-cost { color: #0f0; }
+        .shop-item.owned .shop-item-cost { color: #0f0; }
+        .shop-item.unaffordable { opacity: 0.4; cursor: not-allowed; }
+        .shop-item.locked { opacity: 0.3; cursor: not-allowed; }
+
+        .cosmetic-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+        .cosmetic-swatch { width: 96px; border: 2px solid #345; background: rgba(0,15,25,0.8); padding: 10px; text-align: center; cursor: var(--cursor-arrow), pointer; font-size: 9px; color: #ccc; }
+        .cosmetic-swatch-dot { width: 24px; height: 24px; border-radius: 50%; margin: 0 auto 8px; border: 2px solid #fff; }
+        .cosmetic-swatch.active { border-color: #0f0; box-shadow: 0 0 12px rgba(0,255,0,0.3); }
+        .cosmetic-swatch.locked { opacity: 0.5; }
+        .cosmetic-swatch-cost { color: #ea9e22; margin-top: 4px; }
+
+        /* Contract briefing */
+        #contract-briefing-screen .hub-title { font-size: 24px; }
+        .briefing-biome { font-size: 12px; color: #f90; letter-spacing: 4px; margin-bottom: 20px; }
+        .briefing-rival { width: min(760px, 92%); text-align: center; margin-bottom: 30px; }
+        .briefing-rival-label { font-size: 10px; color: #789; letter-spacing: 3px; margin-bottom: 8px; }
+        .briefing-rival-name { font-size: 20px; color: #f66; text-shadow: 0 0 10px #f00; margin-bottom: 10px; letter-spacing: 2px; }
+        .briefing-rival-kills { font-size: 10px; color: #999; margin-bottom: 20px; }
+        .briefing-rival-cards { display: flex; gap: 14px; justify-content: center; flex-wrap: nowrap; margin-bottom: 16px; }
+        .rival-card { width: 160px; border: 2px solid #533; background: rgba(20,0,0,0.5); padding: 12px; }
+        .rival-card-icon { display: block; width: 64px; height: 64px; margin: 0 auto 8px; image-rendering: pixelated; filter: drop-shadow(0 0 6px rgba(255,68,68,0.6)); }
+        .rival-card-class { font-size: 13px; color: #f88; letter-spacing: 1px; margin-bottom: 8px; }
+        .rival-card-upgrade { font-size: 9px; color: #ccc; padding: 2px 0; text-align: left; }
+        .rival-card-empty { font-size: 9px; color: #666; }
+        .briefing-rival-shared { font-size: 10px; color: #f90; letter-spacing: 1px; }
+
+        /* Cosmetic HUD themes - pure interface skins, zero effect on DU physics/balance */
+        #game-container.hud-theme-ember .stat-box, #game-container.hud-theme-ember .mech-hp-container, #game-container.hud-theme-ember .mech-jet-container, #game-container.hud-theme-ember .xp-track, #game-container.hud-theme-ember .shield-circle { border-color: #ff7b1a !important; box-shadow: 0 0 10px rgba(255,123,26,0.4) !important; }
+        #game-container.hud-theme-ember .text-highlight, #game-container.hud-theme-ember .hp-label, #game-container.hud-theme-ember .progression-hud { color: #ff7b1a !important; }
+        #game-container.hud-theme-ember .mech-hp-fill, #game-container.hud-theme-ember .xp-fill { background: linear-gradient(90deg, #ff7b1a, #a04400) !important; }
+
+        #game-container.hud-theme-toxic .stat-box, #game-container.hud-theme-toxic .mech-hp-container, #game-container.hud-theme-toxic .mech-jet-container, #game-container.hud-theme-toxic .xp-track, #game-container.hud-theme-toxic .shield-circle { border-color: #9dff1a !important; box-shadow: 0 0 10px rgba(157,255,26,0.4) !important; }
+        #game-container.hud-theme-toxic .text-highlight, #game-container.hud-theme-toxic .hp-label, #game-container.hud-theme-toxic .progression-hud { color: #9dff1a !important; }
+        #game-container.hud-theme-toxic .mech-hp-fill, #game-container.hud-theme-toxic .xp-fill { background: linear-gradient(90deg, #9dff1a, #4a7d00) !important; }
+
+        #game-container.hud-theme-magenta .stat-box, #game-container.hud-theme-magenta .mech-hp-container, #game-container.hud-theme-magenta .mech-jet-container, #game-container.hud-theme-magenta .xp-track, #game-container.hud-theme-magenta .shield-circle { border-color: #ff2ad1 !important; box-shadow: 0 0 10px rgba(255,42,209,0.4) !important; }
+        #game-container.hud-theme-magenta .text-highlight, #game-container.hud-theme-magenta .hp-label, #game-container.hud-theme-magenta .progression-hud { color: #ff2ad1 !important; }
+        #game-container.hud-theme-magenta .mech-hp-fill, #game-container.hud-theme-magenta .xp-fill { background: linear-gradient(90deg, #ff2ad1, #830066) !important; }
+
+        #game-container.hud-theme-blood .stat-box, #game-container.hud-theme-blood .mech-hp-container, #game-container.hud-theme-blood .mech-jet-container, #game-container.hud-theme-blood .xp-track, #game-container.hud-theme-blood .shield-circle { border-color: #ff2222 !important; box-shadow: 0 0 10px rgba(255,34,34,0.4) !important; }
+        #game-container.hud-theme-blood .text-highlight, #game-container.hud-theme-blood .hp-label, #game-container.hud-theme-blood .progression-hud { color: #ff2222 !important; }
+        #game-container.hud-theme-blood .mech-hp-fill, #game-container.hud-theme-blood .xp-fill { background: linear-gradient(90deg, #ff2222, #700) !important; }
+
+        @media (max-width: 900px) {
+            .hub-body { flex-direction: column; }
+            .hub-column { width: 100%; }
+        }

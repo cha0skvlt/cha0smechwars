@@ -5,6 +5,8 @@ import { Grid } from '../core/grid.js';
 import { Logger } from '../core/Logger.js';
 import { RunStats } from '../core/RunStats.js';
 import { HighScores } from '../core/HighScores.js';
+import { Cosmetics } from '../core/Cosmetics.js';
+import { RivalIdentity } from '../core/RivalIdentity.js';
 import { Canvas, Ctx, Cam, Input, W, H, resize } from '../core/runtime.js';
 import { AudioSys } from '../audio/audio.js';
 import { bakeSprites } from '../render/bake.js';
@@ -15,18 +17,38 @@ import { Obstacle } from '../entities/Obstacle.js';
 import { Turret } from '../entities/Turret.js';
 import { GravityWell } from '../entities/GravityWell.js';
 import { Particle, Debris, WeatherParticle, Shockwave, Floater, Decal } from '../entities/effects.js';
-import { addXp, applyUpgrade, grantAiProgress, killReward, progressionOwner, rollUpgradeChoices, xpForNextLevel } from '../progression/progression.js';
+import { addXp, applyUpgrade, grantAiProgress, killReward, mechKillReward, progressionOwner, rollUpgradeChoices, xpForNextLevel } from '../progression/progression.js';
 import { isHostile, resolveOutgoingDamage, rpgSplashDamage } from '../combat/damage.js';
 import { rpgExplodeFx } from '../combat/rpgFeel.js';
-import { randomMechClass, randomRivalGroupSize } from '../entities/mechLifecycle.js';
+import { randomLanceComposition } from '../entities/mechLifecycle.js';
+import { formationSlotTarget } from '../entities/botTactics.js';
+import { applyLoadout } from '../progression/tacticalUpgrades.js';
+import { purchaseRivalLoadout } from '../progression/rivalBudget.js';
+import { Hub } from '../ui/hub.js';
 
 // @meta:Game - Main game state and loop controller - manages all entities, rendering, and game logic
+// v8 Lance Update: player and rival each field a 3-mech Lance (playerLance/rivalLance). `player`
+// always points at the currently human-controlled slot; the other two run on BotController AI.
 export const Game = {
-    active: false, paused: false, frame: 0, score: 0, rivalKills: 0, shake: 0, wave: 1, waveT: 0, boss: false, freeze: 0, biome: 'forest',
-    player: null, allies: [], rivals: [], enemies: [], bullets: [], obs: [], parts: [], decals: [], pows: [], floaters: [], weather: [], waves: [], difficulty: 1.0,
-    combo: 0, comboT: 0, bgCv: null, bgCtx: null, selectedClass: 'battle', rivalRespawnTimer: 0, companionRespawnTimer: 0,
-    playerDead: false, deathTimer: 0, deathReason: null, debris: [],
+    active: false, paused: false, frame: 0, shake: 0, wave: 1, waveT: 0, boss: false, freeze: 0, biome: 'forest',
+    player: null, playerLance: [], rivalLance: [], activeSlot: 0,
+    enemies: [], bullets: [], obs: [], parts: [], decals: [], pows: [], floaters: [], weather: [], waves: [], difficulty: 1.0,
+    combo: 0, comboT: 0, bgCv: null, bgCtx: null,
+    lanceWiped: false, deathTimer: 0, deathReason: null, debris: [],
     lastTime: 0, accumulator: 0, step: 1/60,
+
+    // Persistent meta-progression (spans missions within a run; reset only by beginNewRun)
+    lanceComposition: ['battle', 'heavy', 'scout'],
+    ceWallet: 0, missionCE: 0,
+    winStreak: 0, lossStreak: 0,
+    lanceSlotUpgrades: [new Set(), new Set(), new Set()],
+    lanceSharedUpgrades: new Set(),
+    rivalBudget: 0, rivalCompanyName: '', rivalMechKills: 0,
+    rivalLoadout: [], rivalSharedUpgrades: [],
+    playerMechKills: 0, missionsCleared: 0,
+    cosmeticsOwned: new Set(['hudDefault']), activeCosmetic: 'hudDefault',
+    killFeedQueue: [], killFeedTimer: 0,
+    pendingMissionOutcome: null, missionEndAt: 0, pendingHubResult: null,
 
     friendlies: [],
     timeScale: 1.0,
@@ -36,13 +58,261 @@ export const Game = {
     bossDeathExplosions: [],
     upgradeChoices: [],
     pendingUpgradeCount: 0,
+    upgradeChoiceOwner: null,
     perfPhases: { backgroundMs: 0, particlesMs: 0, domMs: 0 },
 
-    initSystem: function() { AudioSys.init(); AudioSys.resume(); bakeSprites(); this.bgCv = document.createElement('canvas'); this.bgCv.width = 3000; this.bgCv.height = 3000; this.bgCtx = this.bgCv.getContext('2d'); this.floaters = []; Logger.event('system', 'init_system', 'audio+sprites ready'); },
-    showClassSelect: function() { DOM.hide('start-screen'); DOM.show('class-select-screen'); },
-    getMechs: function() {
-        return [this.player, ...this.allies, ...this.rivals].filter(Boolean);
+    initSystem: function() {
+        AudioSys.init(); AudioSys.resume(); bakeSprites();
+        this.bgCv = document.createElement('canvas'); this.bgCv.width = 3000; this.bgCv.height = 3000; this.bgCtx = this.bgCv.getContext('2d'); this.floaters = [];
+        // Cosmetics persist forever (localStorage), independent of run/mission resets.
+        const cosmetics = Cosmetics.load();
+        this.cosmeticsOwned = new Set(cosmetics.owned);
+        this.activeCosmetic = cosmetics.active;
+        Hub.applyCosmetic(this.activeCosmetic);
+        Logger.event('system', 'init_system', 'audio+sprites ready');
     },
+
+    // --- Run / mission lifecycle (v8) ------------------------------------------------------
+
+    /** Fresh campaign: wipes wallet, streaks, upgrades, rival identity. Shows the Lance hub. */
+    beginNewRun: function() {
+        this.ceWallet = 0; this.missionCE = 0;
+        this.winStreak = 0; this.lossStreak = 0;
+        this.lanceSlotUpgrades = [new Set(), new Set(), new Set()];
+        this.lanceSharedUpgrades = new Set();
+        this.rivalBudget = 0;
+        // Blood debt (rival company + player-mech kill tally) survives across runs for the whole
+        // browser session (sessionStorage) - same nemesis all session, not re-rolled every run.
+        const identity = RivalIdentity.load();
+        if(identity.companyName) {
+            this.rivalCompanyName = identity.companyName;
+            this.rivalMechKills = identity.mechKills;
+        } else {
+            this.rivalCompanyName = BALANCE.RIVAL.companyNames[Math.floor(Math.random() * BALANCE.RIVAL.companyNames.length)];
+            this.rivalMechKills = 0;
+            RivalIdentity.save(this.rivalCompanyName, this.rivalMechKills);
+        }
+        this.missionsCleared = 0;
+        // Cosmetics are NOT reset here - they persist forever across runs (see initSystem/Cosmetics.js).
+        RunStats.reset({ class: this.lanceComposition.join('+') });
+        Logger.event('system', 'new_run', this.rivalCompanyName, { composition: this.lanceComposition });
+        this.showLanceHub(null);
+    },
+
+    showLanceHub: function(missionResult) {
+        DOM.hideAll(); DOM.hide('boss-hp-box'); DOM.hide('contract-briefing-screen');
+        Hub.renderHub(missionResult);
+        DOM.show('lance-hub-screen');
+    },
+
+    /** Called by the hub UI once the player confirms a 3-slot composition and hits DEPLOY. */
+    confirmLanceComposition: function(newComposition) {
+        for(let i=0; i<BALANCE.LANCE.size; i++) {
+            if(this.lanceComposition[i] !== newComposition[i]) this.lanceSlotUpgrades[i] = new Set();
+        }
+        this.lanceComposition = newComposition.slice();
+        this.prepareMission();
+    },
+
+    buildLanceMech: function(type, slot, faction) {
+        const mech = new Player(type, { isBot: true, faction, lanceSlot: slot });
+        return mech;
+    },
+
+    pickSpawnCorners: function(rng=Math.random) {
+        const pairs = BALANCE.LANCE.cornerPairs;
+        const pair = pairs[Math.floor(rng() * pairs.length)];
+        const flip = rng() < 0.5;
+        const playerCorner = flip ? pair[0] : pair[1];
+        const rivalCorner = flip ? pair[1] : pair[0];
+        const margin = BALANCE.LANCE.cornerMargin;
+        const toXY = (corner) => ({ x: corner.x > 0 ? 3000 - margin : margin, y: corner.y > 0 ? 3000 - margin : margin });
+        const playerXY = toXY(playerCorner);
+        const rivalXY = toXY(rivalCorner);
+        const angleTo = (from, to) => Math.atan2(to.y - from.y, to.x - from.x);
+        return {
+            player: playerXY, rival: rivalXY,
+            playerFacing: angleTo(playerXY, rivalXY),
+            rivalFacing: angleTo(rivalXY, playerXY),
+        };
+    },
+
+    placeLanceAtCorner: function(lance, anchor, facing, rng=Math.random) {
+        const leader = lance[0];
+        leader.x = anchor.x - leader.w/2; leader.y = anchor.y - leader.h/2;
+        if(this.checkWall(leader)) this.placeMechInField(leader, rng);
+        leader.facing = facing;
+        leader.saveState();
+        for(let i=1; i<lance.length; i++) {
+            const mech = lance[i];
+            const slotTarget = formationSlotTarget(leader, i);
+            mech.x = slotTarget.x - mech.w/2; mech.y = slotTarget.y - mech.h/2;
+            if(this.checkWall(mech)) this.placeMechNear(mech, leader, rng);
+            mech.facing = facing;
+            mech.saveState();
+        }
+    },
+
+    /** Builds a fresh mission: lances, map, rival shopping, contract briefing. Does not run the loop yet. */
+    prepareMission: function() {
+        AudioSys.stopMusic(); DOM.hideAll(); DOM.hide('boss-hp-box');
+        this.active = false; this.paused = false;
+        this.frame = 0; this.missionCE = 0; this.wave = 1; this.waveT = 0; this.boss = false;
+        this.biome = this.randBiome();
+        this.combo = 0; this.comboT = 0; this.lanceWiped = false; this.deathTimer = 0; this.deathReason = null; this.debris = [];
+        this.lastTime = 0; this.accumulator = 0; Cam.x = 0; Cam.y = 0; Cam.lastX = 0; Cam.lastY = 0; Cam.rot = 0; Cam.trauma = 0;
+        this.playerMechKills = 0; this.killFeedQueue = []; this.killFeedTimer = 0;
+        this.pendingMissionOutcome = null; this.missionEndAt = 0;
+
+        this.enemies=[]; this.bullets=[]; this.parts=[]; this.decals=[]; this.pows=[]; this.floaters=[]; this.weather=[]; this.waves=[];
+        this.friendlies=[]; this.timeScale = 1.0; this.warpTimer = 0; this.critSlowMo = 0; this.bossDeathAnim = 0; this.bossDeathExplosions = [];
+        this.upgradeChoices = []; this.pendingUpgradeCount = 0; this.upgradeChoiceOwner = null; DOM.hideUpgradeChoices();
+
+        for(let i=0;i<50;i++) this.weather.push(new WeatherParticle(this.biome));
+        this.genMap();
+
+        const rng = Math.random;
+        const corners = this.pickSpawnCorners(rng);
+        const rivalComposition = randomLanceComposition(rng);
+        const purchase = purchaseRivalLoadout(rivalComposition, this.rivalBudget, rng);
+        this.rivalBudget = purchase.remaining;
+        this.rivalLoadout = purchase.loadout;
+        this.rivalSharedUpgrades = purchase.sharedUpgrades;
+
+        this.playerLance = this.lanceComposition.map((type, slot) => this.buildLanceMech(type, slot, 'player'));
+        this.rivalLance = rivalComposition.map((type, slot) => this.buildLanceMech(type, slot, 'rival'));
+
+        this.activeSlot = 0;
+        this._setActiveSlot(0, true);
+
+        this.placeLanceAtCorner(this.playerLance, corners.player, corners.playerFacing, rng);
+        this.placeLanceAtCorner(this.rivalLance, corners.rival, corners.rivalFacing, rng);
+
+        this.playerLance.forEach((mech, slot) => applyLoadout(mech, mech.type, [...this.lanceSlotUpgrades[slot]], [...this.lanceSharedUpgrades]));
+        this.rivalLoadout.forEach((entry, slot) => applyLoadout(this.rivalLance[slot], entry.class, entry.upgrades, this.rivalSharedUpgrades));
+
+        RunStats.setMeta({ class: this.lanceComposition.join('+'), biome: this.biome });
+        Logger.event('system', 'mission_prepared', 'contract briefing', {
+            composition: this.lanceComposition, rivalComposition, biome: this.biome, rivalBudgetSpent: purchase.spent,
+        });
+        this.showContractBriefing();
+    },
+
+    showContractBriefing: function() {
+        Hub.renderContractBriefing({
+            biome: this.biome,
+            companyName: this.rivalCompanyName,
+            rivalMechKills: this.rivalMechKills,
+            loadout: this.rivalLoadout,
+            sharedUpgrades: this.rivalSharedUpgrades,
+        });
+        DOM.show('contract-briefing-screen');
+    },
+
+    deployMission: function() {
+        DOM.hide('contract-briefing-screen'); DOM.show('ui-layer');
+        this.active = true; this.paused = false;
+        AudioSys.startMusic('game');
+        requestAnimationFrame((t) => Game.loop(t));
+    },
+
+    resolveMissionEnd: function(outcome) {
+        this.active = false;
+        AudioSys.stopMusic();
+        const share = outcome === 'win' ? 1 : (outcome === 'raceLoss' ? BALANCE.CE.raceLossShare : BALANCE.CE.wipeShare);
+        const credited = Math.floor(this.missionCE * share);
+        this.ceWallet += credited;
+        RunStats.ceEarned(credited);
+        if(outcome === 'win') {
+            this.winStreak++; this.lossStreak = 0;
+            this.rivalBudget += BALANCE.RIVAL.gainPerWin;
+            this.missionsCleared++;
+            RunStats.missionCleared();
+        } else {
+            this.lossStreak++; this.winStreak = 0;
+        }
+        Logger.event('system', 'mission_end', outcome, {
+            outcome, missionCE: this.missionCE, credited, ceWallet: this.ceWallet,
+            winStreak: this.winStreak, lossStreak: this.lossStreak,
+        });
+        const missionResult = { outcome, credited, missionCE: this.missionCE };
+        if(outcome === 'wipe') {
+            // A wipe fails THIS mission (same 50% CE penalty as any other loss, per
+            // BALANCE.CE.wipeShare) but is not a run-ending "game over" - the CE wallet, streaks,
+            // and tactical upgrades all persist (section 7: "непотраченный CE не сгорает").
+            // Show a recap, then return to the hub.
+            this.pendingHubResult = missionResult;
+            this.showLanceWipeSummary();
+            return;
+        }
+        this.showLanceHub(missionResult);
+    },
+
+    // --- Lance composition helpers -----------------------------------------------------------
+
+    getMechs: function() {
+        return [...this.playerLance, ...this.rivalLance].filter(m => m && m.hp > 0);
+    },
+    getAllLanceMechs: function() {
+        return [...this.playerLance, ...this.rivalLance];
+    },
+    hasDeadLanceMate: function(mech) {
+        if(!mech) return false;
+        const lance = mech.faction === 'player' ? this.playerLance : (mech.faction === 'rival' ? this.rivalLance : null);
+        return !!lance && lance.some(m => m.hp <= 0);
+    },
+    leaderOf: function(mech) {
+        if(!mech) return null;
+        if(mech.faction === 'player') return this.player;
+        if(mech.faction === 'rival') return this.rivalLance.find(m => m.hp > 0) || null;
+        return null;
+    },
+    nextLivingSlot: function(fromSlot) {
+        const n = this.playerLance.length;
+        for(let i=1; i<=n; i++) {
+            const idx = (fromSlot + i) % n;
+            if(this.playerLance[idx].hp > 0) return idx;
+        }
+        return null;
+    },
+    _setActiveSlot: function(slot, initial=false) {
+        if(!initial) {
+            const prev = this.playerLance[this.activeSlot];
+            if(prev) { prev.isBot = true; prev.isHumanPlayer = false; prev.role = 'ally'; }
+        }
+        this.activeSlot = slot;
+        const next = this.playerLance[slot];
+        next.isBot = false; next.isHumanPlayer = true; next.role = 'human';
+        this.player = next;
+    },
+    /** [C] key: cycle control to the next living lance mech. Left mech instantly goes AI-FOLLOW.
+     *  A pending level-up choice does NOT block this - upgradeChoiceOwner (not this.player) is
+     *  who the choice actually applies to, so switching away mid-choice and picking a perk later
+     *  still credits the right mech instead of forcing you to stand still and pick blind (or die)
+     *  while a teammate needs control right now. */
+    switchControl: function() {
+        if(!this.active || this.paused || !this.playerLance.length) return;
+        const n = this.playerLance.length;
+        for(let i=1; i<=n; i++) {
+            const idx = (this.activeSlot + i) % n;
+            if(this.playerLance[idx].hp > 0 && idx !== this.activeSlot) {
+                this._setActiveSlot(idx);
+                Logger.event('player', 'lance_switch', this.player.type, { slot: idx, class: this.player.type });
+                return;
+            }
+        }
+    },
+    handleControlledMechDeath: function() {
+        const next = this.nextLivingSlot(this.activeSlot);
+        if(next != null) { this._setActiveSlot(next); return; }
+        if(!this.lanceWiped) {
+            this.lanceWiped = true; this.deathTimer = 150;
+            if(!this.deathReason) this.deathReason = 'LANCE ELIMINATED';
+            this.shake = 30; Cam.trauma = 1.0;
+            for(let k=0; k<10; k++) this.debris.push(new Debris(this.player.x+16, this.player.y+16, '#00eaff'));
+        }
+    },
+
     getDamageableTargets: function() {
         return [
             ...this.getMechs(),
@@ -52,6 +322,21 @@ export const Game = {
     },
     getCombatTargets: function(source) {
         return this.getDamageableTargets().filter(target => isHostile(source, target));
+    },
+    /** Bastion Shield (v8): a sheltered ally's damage redirects to the bearer's own HP/shield pool. */
+    findBastionShelter: function(target) {
+        // Only lance mechs shelter behind Bastion Shield - not turrets/gravity wells that share their faction.
+        if(!target || !Number.isFinite(target.level) || (target.faction !== 'player' && target.faction !== 'rival')) return null;
+        const radius = 28 * BALANCE.HEAVY_ABILITIES.bastionShieldRadiusMult;
+        const radiusSq = radius * radius;
+        const bearers = this.getMechs().filter(m => m !== target && m.bastionShield && m.faction === target.faction && m.shield > 0);
+        for(let i=0; i<bearers.length; i++) {
+            const bearer = bearers[i];
+            const dx = (target.x+target.w/2) - (bearer.x+bearer.w/2);
+            const dy = (target.y+target.h/2) - (bearer.y+bearer.h/2);
+            if(dx*dx + dy*dy <= radiusSq) return bearer;
+        }
+        return null;
     },
     placeMechNear: function(mech, anchor=this.player, rng=Math.random) {
         const center = anchor || { x: 1500, y: 1500, w: 0, h: 0 };
@@ -72,56 +357,31 @@ export const Game = {
         for(let attempt=0; attempt<80; attempt++) {
             const x = rng() * 2800 + 100;
             const y = rng() * 2800 + 100;
-            const dx = x - this.player.x;
-            const dy = y - this.player.y;
-            if(dx*dx + dy*dy < 250000) continue;
             if(!this.checkWall({ x, y, w: mech.w, h: mech.h })) {
                 mech.x = x; mech.y = y; mech.saveState();
                 return true;
             }
         }
-        return this.placeMechNear(mech, this.player, rng);
+        return this.placeMechNear(mech, { x: 1500, y: 1500, w: 0, h: 0 }, rng);
     },
-    spawnCompanion: function(rng=Math.random) {
-        if(!this.player || this.player.companionCapacity < 1 || this.allies.length > 0) return null;
-        const ally = new Player(randomMechClass(rng), {
-            isBot: true,
-            faction: 'player',
-            role: 'ally',
-            owner: this.player,
-        });
-        this.placeMechNear(ally, this.player, rng);
-        this.allies.push(ally);
-        Logger.event('bot', 'companion_spawn', ally.type, { class: ally.type });
-        return ally;
-    },
-    spawnRivalGroup: function(rng=Math.random) {
-        if(this.rivals.length > 0) return [];
-        const count = randomRivalGroupSize(rng);
-        const spawned = [];
-        for(let i=0; i<count; i++) {
-            const rival = new Player(randomMechClass(rng), {
-                isBot: true,
-                faction: 'rival',
-                role: 'rival',
-            });
-            this.placeMechInField(rival, rng);
-            spawned.push(rival);
-        }
-        this.rivals.push(...spawned);
-        Logger.event('bot', 'rival_group_spawn', `${count} rivals`, {
-            count,
-            classes: spawned.map(mech => mech.type),
-        });
-        return spawned;
-    },
-    selectClass: function(type) { this.selectedClass = type; Logger.event('player', 'select_class', type, { class: type }); DOM.hide('class-select-screen'); this.restart(); },
     togglePause: function() { if(!this.active)return; this.paused=!this.paused; const p=document.getElementById('pause-screen'); if(this.paused){ AudioSys.stopMusic(); if(p)p.classList.remove('hidden'); this.lastTime = 0; Logger.event('system', 'pause', 'paused'); }else{ AudioSys.startMusic(this.boss?'boss':'game'); if(p)p.classList.add('hidden'); Logger.event('system', 'unpause', 'resumed'); } },
+    /** Drops any pending level-up choice - used when its owner mech dies before picking (the
+     *  choice belonged to them, not whoever is controlled now) so the UI never gets stuck showing
+     *  a dead mech's perk options and blocking the next mech's level-up from queuing up. */
+    forfeitUpgradeChoice: function() {
+        this.pendingUpgradeCount = 0;
+        this.upgradeChoices = [];
+        this.upgradeChoiceOwner = null;
+        DOM.hideUpgradeChoices();
+    },
     offerUpgrade: function() {
-        if(!this.player || this.pendingUpgradeCount <= 0 || this.upgradeChoices.length > 0) return;
-        this.upgradeChoices = rollUpgradeChoices(this.player);
+        const owner = this.upgradeChoiceOwner;
+        if(owner && owner.hp <= 0) { this.forfeitUpgradeChoice(); return; }
+        if(!owner || this.pendingUpgradeCount <= 0 || this.upgradeChoices.length > 0) return;
+        this.upgradeChoices = rollUpgradeChoices(owner);
         if(this.upgradeChoices.length === 0) {
             this.pendingUpgradeCount = 0;
+            this.upgradeChoiceOwner = null;
             DOM.hideUpgradeChoices();
             return;
         }
@@ -129,25 +389,30 @@ export const Game = {
     },
     selectUpgrade: function(index) {
         const choice = this.upgradeChoices[index];
-        if(!choice || !this.player) return false;
-        applyUpgrade(this.player, choice.id);
-        if(choice.id === 'companionProtocol') this.spawnCompanion();
+        const owner = this.upgradeChoiceOwner;
+        if(!choice || !owner) return false;
+        applyUpgrade(owner, choice.id);
         this.pendingUpgradeCount = Math.max(0, this.pendingUpgradeCount - 1);
         this.upgradeChoices = [];
         DOM.hideUpgradeChoices();
         Logger.event('progression', 'upgrade_selected', choice.id, {
-            level: this.player.level,
+            level: owner.level,
             rarity: choice.rarity,
             pending: this.pendingUpgradeCount,
         });
+        if(this.pendingUpgradeCount <= 0) this.upgradeChoiceOwner = null;
         this.offerUpgrade();
         return true;
     },
+    /** Human-controlled mech's own level/XP + upgrade-choice UI (wallet crediting happens in
+     *  grantKillProgressForVictim, for the whole Lance - see below). The mech that earns the XP is
+     *  locked in as upgradeChoiceOwner right away, so switching control (C) while the choice is
+     *  still pending can never hand the perk to whoever happens to be controlled when it's picked. */
     grantKillProgress: function(reward) {
-        this.score += reward;
         const levelsGained = addXp(this.player, reward);
         if(levelsGained <= 0) return;
 
+        if(this.pendingUpgradeCount <= 0) this.upgradeChoiceOwner = this.player;
         this.pendingUpgradeCount += levelsGained;
         Logger.event('progression', 'level_up', `LEVEL ${this.player.level}`, {
             level: this.player.level,
@@ -162,7 +427,15 @@ export const Game = {
         if(!killer || killer === victim || !Number.isFinite(victim?.maxHp)) {
             return { killer: null, reward: 0, levelsGained: 0, upgrades: [] };
         }
-        const reward = killReward(victim.maxHp);
+        const isMech = Number.isFinite(victim.level);
+        const reward = isMech ? mechKillReward(victim.maxHp, victim.level) : killReward(victim.maxHp);
+
+        // Combat Experience is a whole-Lance pool (section 7): ANY player-side kill - human or
+        // AI-follow ally - feeds missionCE, which credits the wallet at mission end. Previously
+        // this only fired for the currently human-controlled mech, so ally kills (routinely most
+        // of a 3-mech Lance's kills) silently vanished instead of reaching the wallet.
+        if(killer.faction === 'player') this.missionCE += reward;
+
         if(killer === this.player) {
             const levelBefore = this.player.level;
             this.grantKillProgress(reward);
@@ -187,33 +460,11 @@ export const Game = {
         }
         return { killer, reward: 0, levelsGained: 0, upgrades: [] };
     },
-    restart: function() {
-        AudioSys.stopMusic(); DOM.hideAll(); DOM.show('ui-layer'); DOM.hide('boss-hp-box');
-        this.active=true; this.paused=false; this.score=0; this.rivalKills=0; this.wave=1; this.waveT=0; this.boss=false; this.biome=this.randBiome();
-        this.combo=0; this.comboT=0; this.playerDead=false; this.deathTimer=0; this.deathReason=null; this.debris=[];
-        this.lastTime = 0; this.accumulator = 0; Cam.x = 0; Cam.y = 0; Cam.lastX = 0; Cam.lastY = 0; Cam.rot = 0; Cam.trauma = 0;
-        this.player = new Player(this.selectedClass);
-        this.allies = [];
-        this.rivals = [];
-        this.rivalRespawnTimer = 0;
-        this.companionRespawnTimer = 0;
 
-        this.enemies=[]; this.bullets=[]; this.parts=[]; this.decals=[]; this.pows=[]; this.floaters=[]; this.weather=[]; this.waves=[];
-        this.friendlies=[]; this.timeScale = 1.0; this.warpTimer = 0; this.critSlowMo = 0; this.bossDeathAnim = 0; this.calmWavePeriod = false; this.bossDeathExplosions = [];
-        this.upgradeChoices = []; this.pendingUpgradeCount = 0; DOM.hideUpgradeChoices();
-
-        for(let i=0;i<50;i++) this.weather.push(new WeatherParticle(this.biome));
-        this.genMap();
-        this.spawnRivalGroup();
-        AudioSys.startMusic('game');
-        RunStats.reset({ class: this.selectedClass, biome: this.biome });
-        Logger.event('system', 'restart', 'run start', {
-            class: this.selectedClass,
-            biome: this.biome,
-            rivalClasses: this.rivals.map(mech => mech.type),
-        });
-        requestAnimationFrame((t) => Game.loop(t));
+    pushKillFeed: function(text) {
+        this.killFeedQueue.push(text);
     },
+
     getDifficultyMultiplier: function() { return 1 + (Math.floor(this.wave / 10) * 0.1); },
     randBiome: function(exclude) { const b = ['forest','ruins','dungeon']; let res = b[Math.floor(Math.random()*3)]; if(exclude) { while(res === exclude) res = b[Math.floor(Math.random()*3)]; } return res; },
     genMap: function() {
@@ -253,17 +504,6 @@ export const Game = {
         this.weather=[]; for(let i=0;i<50;i++) this.weather.push(new WeatherParticle(this.biome));
     },
     addOb: function(o) { this.obs.push(o); if(o.t!=='water') Grid.add(o); },
-    switchBiome: function() {
-        const prev=this.biome;
-        this.biome=this.randBiome(this.biome);
-        this.genMap();
-        this.player.x=1500; this.player.y=1500; this.player.saveState();
-        for(const ally of this.allies) this.placeMechNear(ally, this.player);
-        for(const rival of this.rivals) this.placeMechInField(rival);
-        this.enemies=[]; this.bullets=[]; this.friendlies=[];
-        RunStats.setMeta({ biome: this.biome });
-        Logger.event('wave', 'biome_switch', this.biome, { from: prev, to: this.biome });
-    },
     checkWall: function(r) {
         if(r.x<0||r.x+r.w>3000||r.y<0||r.y+r.h>3000)return true;
         const nearby = Grid.get(r);
@@ -333,7 +573,7 @@ export const Game = {
             else this.damageTarget(target, damage, sourceEntity || source);
         }
     },
-    damageTarget: function(target, baseDamage, source) {
+    damageTarget: function(target, baseDamage, source, channel='generic') {
         if(!target || typeof target.takeDamage !== 'function') return null;
         const resolved = resolveOutgoingDamage(source, target, baseDamage);
         if(resolved.isCrit) {
@@ -341,7 +581,8 @@ export const Game = {
             AudioSys.critHit();
             Logger.debug('combat', 'crit', 'critical hit', { finalDmg: resolved.amount, critSlowMo: this.critSlowMo, timeScale: this.timeScale });
         }
-        const applied = target.takeDamage(resolved.amount, source);
+        const bearer = this.findBastionShelter(target);
+        const applied = (bearer || target).takeDamage(resolved.amount, source, channel);
         return { ...resolved, applied };
     },
     dmg: function(e,d, source) {
@@ -353,22 +594,22 @@ export const Game = {
         let c = e.blood==='oil' ? '#333' : e.blood;
         for(let i=0;i<3;i++)this.parts.push(new Particle(e.x+e.w/2,e.y+e.h/2, c));
 
-        if(e.hp <= 0 && ['mantis','fortress','eye'].includes(e.t)) {
+        if(e.hp <= 0 && ['mantis','fortress','eye'].includes(e.t) && !e._runStatsCounted) {
             const killer = progressionOwner(source);
             if(killer?.faction === 'rival') {
-                // Count boss kill before gameOver snapshot (death loop would be too late)
+                // Count boss kill before the enemies-array death loop would be too late.
                 RunStats.kill(e.t, false, true);
                 Logger.event('combat', 'boss_kill', e.t, {
-                    type: e.t, score: 0, boss: true, byPlayer: false, wave: this.wave,
+                    type: e.t, boss: true, byPlayer: false, wave: this.wave,
                 });
                 e._runStatsCounted = true;
-                this.gameOver("RIVAL ELIMINATED TARGET");
+                this.resolveMissionEnd('raceLoss');
             }
         }
         return result;
     },
     spawnLoot: function(x,y) {
-        // Updated Loot Table with Modules
+        // Updated Loot Table with Modules + Resurrect (v8) - turret removed (battle carries it by default)
         const lootTable = [
             'repair','repair','repair',
             'shotgun','shotgun',
@@ -377,7 +618,8 @@ export const Game = {
             'laser',
             'shield','shield',
             'quad','freeze',
-            'turret','warp','emp','grav','overclock' // Modules
+            'resurrect',
+            'warp','emp','grav','overclock' // Modules
         ];
         const t = lootTable[Math.floor(Math.random()*lootTable.length)];
         this.pows.push({x:x,y:y,t:t,l:800});
@@ -385,19 +627,22 @@ export const Game = {
     addCombo: function() { this.combo++; this.comboT = 60; },
 
     _fmtKillBag: function(bag) {
-        const keys = Object.keys(bag).sort((a, b) => (bag[b] | 0) - (bag[a] | 0) || a.localeCompare(b));
+        // Mech kills lead the list regardless of count - killing an enemy Lance mech is the
+        // headline result of a mission, monster mulch is the footnote.
+        const keys = Object.keys(bag).sort((a, b) => (
+            (b === 'mech') - (a === 'mech') || (bag[b] | 0) - (bag[a] | 0) || a.localeCompare(b)
+        ));
         if (!keys.length) return '—';
         return keys.map((k) => `${k.toUpperCase()} ×${bag[k]}`).join('  ');
     },
 
     renderRunSummary: function(snap, hsResult) {
         const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
-        set('final-score', snap.score);
+        set('final-score', snap.ce);
         set('death-reason', snap.reason || 'SYSTEM COLLAPSE');
         set('go-wave', 'WAVE ' + snap.wave);
-        set('go-class', (snap.class || '?').toUpperCase());
+        set('go-class', (snap.class || '?').toUpperCase().split('+').map((c) => `[${c}]`).join('+'));
         set('go-biome', (snap.biome || '?').toUpperCase());
-        set('go-rival', String(snap.rivalKills | 0));
         set('go-you-total', String(snap.playerTotal | 0));
         set('go-bot-total', String(snap.botTotal | 0));
         set('go-you-kills', this._fmtKillBag(snap.playerKills || {}));
@@ -420,27 +665,63 @@ export const Game = {
             list.innerHTML = entries.length
                 ? entries.map((e, i) => {
                     const mark = (hsResult && hsResult.rank === i + 1) ? ' class="hs-row hs-current"' : ' class="hs-row"';
-                    return `<div${mark}><span class="hs-rank">#${i + 1}</span> <span class="text-highlight">${e.score|0}</span> · ${(e.class||'?').toUpperCase()} · W${e.wave|0} · P${e.playerTotal|0}/B${e.botTotal|0} · R${e.rivalKills|0}</div>`;
+                    return `<div${mark}><span class="hs-rank">#${i + 1}</span> <span class="text-highlight">${e.ce|0}</span> CE · ${(e.class||'?').toUpperCase()} · MISSIONS ${e.missionsCleared|0} · R${e.rivalKills|0}</div>`;
                 }).join('')
                 : '<div class="hs-row hs-empty">NO RECORDS</div>';
         }
     },
 
-    gameOver: function(reason) {
-        const why = reason || this.deathReason || 'SYSTEM COLLAPSE';
-        this.active=false; AudioSys.stopMusic(); DOM.hideAll(); DOM.show('game-over-screen');
+    /**
+     * Lance-wipe recap screen: session totals (kills, CE, missions cleared) and a high-score
+     * submit, purely as a dramatic checkpoint - NOT a run reset. `continueAfterWipe()` returns
+     * to the Lance Hub with the CE wallet, streaks, and tactical upgrades untouched.
+     */
+    showLanceWipeSummary: function() {
+        const why = this.deathReason || 'SYSTEM COLLAPSE';
+        AudioSys.stopMusic(); DOM.hideAll(); DOM.show('game-over-screen');
         RunStats.setMeta({
-            class: this.selectedClass,
+            class: this.lanceComposition.join('+'),
             biome: this.biome,
             wave: this.wave,
-            score: this.score,
-            rivalKills: this.rivalKills,
         });
         const snap = RunStats.snapshot(why);
         const hsResult = HighScores.submit(snap);
         this.renderRunSummary(snap, hsResult);
-        Logger.event('player', 'game_over', why, snap);
+        Logger.event('player', 'lance_wiped', why, snap);
         Logger.flush();
+    },
+
+    /** [CONTINUE] on the wipe recap screen: back to the hub, wallet/streaks/upgrades intact. */
+    continueAfterWipe: function() {
+        const result = this.pendingHubResult || { outcome: 'wipe', credited: 0, missionCE: 0 };
+        this.pendingHubResult = null;
+        this.showLanceHub(result);
+    },
+
+    updateLanceMech: function(mech, isPlayerSide) {
+        if(mech.hp > 0) { mech.update(); return; }
+        if(mech.justDied) return;
+        mech.justDied = true;
+        const progress = this.grantKillProgressForVictim(mech);
+        Game.explode(mech.x+16, mech.y+16, 60, isPlayerSide, false, false, !isPlayerSide, mech);
+        if(isPlayerSide) {
+            if(progress.killer?.faction === 'rival') {
+                this.rivalMechKills++; RivalIdentity.save(this.rivalCompanyName, this.rivalMechKills);
+                RunStats.kill('mech', false);
+            }
+            Logger.event('bot', 'lance_mech_death', mech.type, { class: mech.type, slot: mech.lanceSlot, level: mech.level });
+            if(mech === this.upgradeChoiceOwner) this.forfeitUpgradeChoice();
+            if(mech === this.player) this.handleControlledMechDeath();
+        } else {
+            if(progress.killer?.faction === 'player') {
+                this.playerMechKills++;
+                progress.killer.mechKills = (progress.killer.mechKills || 0) + 1;
+                RunStats.rival();
+                RunStats.kill('mech', true);
+                this.pushKillFeed('ENEMY MECH DESTROYED');
+            }
+            Logger.event('combat', 'rival_mech_death', mech.type, { class: mech.type, level: mech.level });
+        }
     },
 
     updateLogic: function() {
@@ -463,6 +744,13 @@ export const Game = {
             }
         }
 
+        if(this.pendingMissionOutcome && this.frame >= this.missionEndAt) {
+            const outcome = this.pendingMissionOutcome;
+            this.pendingMissionOutcome = null;
+            this.resolveMissionEnd(outcome);
+            return;
+        }
+
         // Warp module time scale restoration
         if(this.warpTimer > 0) {
             this.warpTimer--;
@@ -470,9 +758,8 @@ export const Game = {
         }
 
         if(!this.player) return;
-        this.player.saveState();
-        for(let i=0; i<this.allies.length; i++) this.allies[i].saveState();
-        for(let i=0; i<this.rivals.length; i++) this.rivals[i].saveState();
+        for(let i=0; i<this.playerLance.length; i++) this.playerLance[i].saveState();
+        for(let i=0; i<this.rivalLance.length; i++) this.rivalLance[i].saveState();
         for(let i=0; i<this.enemies.length; i++) this.enemies[i].saveState();
         for(let i=0; i<this.bullets.length; i++) this.bullets[i].saveState();
         for(let i=0; i<this.parts.length; i++) this.parts[i].saveState();
@@ -485,7 +772,7 @@ export const Game = {
 
         let targetX = this.player.x + 16;
         let targetY = this.player.y + 16;
-        if (!this.playerDead) {
+        if (!this.lanceWiped) {
              let lookVelX = (Input.mouse.wx - targetX) * 0.3;
              let lookVelY = (Input.mouse.wy - targetY) * 0.3;
              targetX += lookVelX; targetY += lookVelY;
@@ -511,28 +798,29 @@ export const Game = {
         Cam.zoom += (targetZoom - Cam.zoom) * 0.05;
         Cam.x+=(tx-Cam.x)*0.1; Cam.y+=(ty-Cam.y)*0.1;
 
-        if(this.playerDead) {
+        if(this.lanceWiped) {
             this.deathTimer--;
             for(let i=0; i<this.debris.length; i++) this.debris[i].update();
             for(let i=this.parts.length-1;i>=0;i--) { let p=this.parts[i]; p.update(); if(p.l<=0)this.parts.splice(i,1); }
             for(let i=0; i<this.waves.length; i++) this.waves[i].update();
             for(let i=0; i<this.weather.length; i++) this.weather[i].update();
-            if(this.deathTimer <= 0) this.gameOver(this.deathReason || 'SYSTEM COLLAPSE');
+            if(this.deathTimer <= 0) this.resolveMissionEnd('wipe');
             return;
         }
 
         Input.mouse.wx=Input.mouse.x+Cam.x; Input.mouse.wy=Input.mouse.y+Cam.y;
         if(this.combo > 0) { this.comboT--; if(this.comboT <= 0) this.combo = 0; }
+        if(this.killFeedTimer > 0) { this.killFeedTimer--; if(this.killFeedTimer <= 0) DOM.hideKillFeed(); }
+        else if(this.killFeedQueue.length > 0) {
+            const text = this.killFeedQueue.shift();
+            DOM.showKillFeed(text, this.playerMechKills);
+            this.killFeedTimer = 90;
+        }
 
         if(!this.boss) {
             this.waveT++; if(this.waveT>1200){
                 this.wave++; this.waveT=0;
                 Logger.event('wave', 'wave_advance', 'WAVE ' + this.wave, { wave: this.wave });
-                // Reset calm period after waves 13, 23, etc (calm waves: bossWave to bossWave+2)
-                const bossWave = Math.floor((this.wave-1)/10)*10 + 10;
-                if(this.wave > bossWave + 2) {
-                    this.calmWavePeriod = false;
-                }
                 if(this.wave%10===0){
                     this.boss=true; DOM.show('boss-hp-box');
                     const bName = this.biome==='forest'?'mantis':(this.biome==='ruins'?'fortress':'eye');
@@ -541,19 +829,16 @@ export const Game = {
                     Logger.event('wave', 'boss_spawn', bName, { boss: bName, biome: this.biome, wave: this.wave });
                 }
             }
-            // Calm period after boss kill - waves 10-11-12, 20-21-22, etc (reduced spawn rate, enemy limit: 30)
-            const bossWave = Math.floor((this.wave-1)/10)*10 + 10;
-            const isCalmPeriod = this.calmWavePeriod && this.wave >= bossWave && this.wave <= bossWave + 2;
-            const spawnRate = isCalmPeriod ? Math.max(40, 120-this.wave*2) : Math.max(20,60-this.wave*2);
+            const spawnRate = Math.max(20, 60-this.wave*2);
 
-            if(this.frame%spawnRate===0&&this.enemies.length<(isCalmPeriod ? 30 : 50)){
+            if(this.frame%spawnRate===0&&this.enemies.length<50){
                 const pool = ['zombie'];
                 if(this.wave > 1) pool.push('gunner', 'gunner');
-                if(this.wave > 2 && !isCalmPeriod) pool.push('stalker');
-                if(this.wave > 3 && !isCalmPeriod) pool.push('shotman');
-                if(this.wave > 4 && !isCalmPeriod) pool.push('commando');
-                if(this.wave > 5 && !isCalmPeriod) pool.push('tank', 'tank', 'tank');
-                if(this.wave >= 6 && !isCalmPeriod) pool.push('sniper');
+                if(this.wave > 2) pool.push('stalker');
+                if(this.wave > 3) pool.push('shotman');
+                if(this.wave > 4) pool.push('commando');
+                if(this.wave > 5) pool.push('tank', 'tank', 'tank');
+                if(this.wave >= 6) pool.push('sniper');
                 if(pool.length > 0) {
                     const t = pool[Math.floor(Math.random() * pool.length)];
                     try { this.enemies.push(new Enemy(t)); } catch(e) { Logger.error('error', 'enemy_spawn', e.message, { type: t }, e.stack); }
@@ -564,65 +849,37 @@ export const Game = {
             if(bossEnt) {
                 const max = (this.biome==='ruins' ? BALANCE.ENEMIES.fortress.hp : (this.biome==='dungeon' ? BALANCE.ENEMIES.eye.hp : BALANCE.ENEMIES.mantis.hp)) * this.getDifficultyMultiplier();
                 document.getElementById('boss-hp-bar').style.width = (bossEnt.hp / max * 100) + "%";
-            } else {
-                // Boss killed - switch biome only if player killed boss (condition: calmWavePeriod active)
+                const bossVal = document.getElementById('boss-hp-value'); if(bossVal) bossVal.textContent = `${Math.ceil(bossEnt.hp)}/${Math.round(max)}`;
+            } else if(!this.pendingMissionOutcome) {
+                // Boss entity gone with no mission outcome queued (e.g. a stray despawn) - treat as a win.
                 this.boss=false; DOM.hide('boss-hp-box'); AudioSys.startMusic('game');
-                Logger.event('wave', 'boss_cleared', 'boss entity gone', { calm: !!this.calmWavePeriod, biome: this.biome });
-                if(this.calmWavePeriod) {
-                    this.switchBiome();
-                    this.calmWavePeriod = false;
-                }
             }
         }
 
         if(this.freeze>0)this.freeze--;
-        this.player.update();
 
-        for(let i=this.allies.length-1; i>=0; i--) {
-            const ally = this.allies[i];
-            if(ally.hp > 0) ally.update();
-            if(ally.hp <= 0) {
-                this.grantKillProgressForVictim(ally);
-                Game.explode(ally.x+16, ally.y+16, 60, true, false, false, false, ally);
-                Logger.event('bot', 'companion_death', ally.type, {
-                    class: ally.type,
-                    level: ally.level,
-                });
-                this.allies.splice(i, 1);
-                this.companionRespawnTimer = BALANCE.BOTS.companionRespawnDelay;
-            }
-        }
-        for(let i=this.rivals.length-1; i>=0; i--) {
-            const rival = this.rivals[i];
-            if(rival.hp > 0) rival.update();
-            if(rival.hp <= 0) {
-                const progress = this.grantKillProgressForVictim(rival);
-                Game.explode(rival.x+16, rival.y+16, 60, false, false, false, true, rival);
-                if(progress.killer === this.player) {
-                    this.rivalKills++;
-                    RunStats.rival();
-                    Logger.event('combat', 'rival_kill', rival.type, {
-                        class: rival.type,
-                        rivalKills: this.rivalKills,
-                        reward: progress.reward,
-                    });
-                } else {
-                    Logger.event('bot', 'rival_death', rival.type, {
-                        class: rival.type,
-                        level: rival.level,
-                    });
+        for(let i=0; i<this.playerLance.length; i++) this.updateLanceMech(this.playerLance[i], true);
+        for(let i=0; i<this.rivalLance.length; i++) this.updateLanceMech(this.rivalLance[i], false);
+
+        // Mech<->mech mutual contact damage: two hostile mechs standing in each other were already
+        // pushed apart (see Player.js's mech-mech separation) but never actually hurt each other.
+        // i<j visits each pair once; Player.takeDamage's own i-frames throttle repeats for free, so
+        // no extra cooldown field is needed here (unlike the mech<->enemy pairing above, since Enemy
+        // has no i-frame mechanic of its own). dashActive is excluded on both sides because a
+        // dashing heavy already deals its own dash damage + knockback to any rival mech it rams
+        // (Game.getCombatTargets includes hostile mechs) - this would otherwise double-hit it.
+        {
+            const allMechs = this.getAllLanceMechs();
+            for(let i=0; i<allMechs.length; i++) {
+                const a = allMechs[i];
+                if(a.hp <= 0 || a.flying || a.dashActive) continue;
+                for(let j=i+1; j<allMechs.length; j++) {
+                    const b = allMechs[j];
+                    if(b.hp <= 0 || b.flying || b.dashActive || !isHostile(a, b) || !a.rectIntersect(b)) continue;
+                    this.damageTarget(a, BALANCE.DAMAGE.contact, b, 'contact');
+                    this.damageTarget(b, BALANCE.DAMAGE.contact, a, 'contact');
                 }
-                this.rivals.splice(i, 1);
-                if(this.rivals.length === 0) this.rivalRespawnTimer = BALANCE.BOTS.respawnDelay;
             }
-        }
-        if(this.rivals.length === 0 && this.rivalRespawnTimer > 0) {
-            this.rivalRespawnTimer--;
-            if(this.rivalRespawnTimer === 0) this.spawnRivalGroup();
-        }
-        if(this.player.companionCapacity > 0 && this.allies.length === 0 && this.companionRespawnTimer > 0) {
-            this.companionRespawnTimer--;
-            if(this.companionRespawnTimer === 0) this.spawnCompanion();
         }
 
         // Optimized entity updates - replaced forEach with for loop
@@ -651,8 +908,27 @@ export const Game = {
                 if(b.wep === 'laser' && b.laserHits.includes(hitKey)) continue;
                 if(b.wep === 'laser') b.laserHits.push(hitKey);
 
-                if(target.t) this.dmg(target, b.dmg, b.source);
-                else this.damageTarget(target, b.dmg, b.source);
+                const hitResult = target.t ? this.dmg(target, b.dmg, b.source) : this.damageTarget(target, b.dmg, b.source);
+
+                // Weapon-based hit feedback: a landed (not i-frame-blocked) hit shoves the target
+                // a little along the bullet's travel direction (weapon-specific, see
+                // BALANCE.WEAPONS.*.knockback) and - for mechs specifically, since monsters already
+                // get their own blood-colored burst a few lines up in dmg() - a weapon-colored
+                // particle burst, same palette Bullet.onObstacleHit() uses against walls. Without
+                // this a mech only had the damage-number floater and the invuln blink to show a hit
+                // actually landed.
+                if(hitResult?.applied && target.hp > 0 && (target instanceof Player || target instanceof Enemy)) {
+                    const knockback = BALANCE.WEAPONS[b.wep]?.knockback;
+                    if(knockback) {
+                        const dirLen = Math.hypot(b.vx, b.vy) || 1;
+                        target.x += (b.vx / dirLen) * knockback;
+                        target.y += (b.vy / dirLen) * knockback;
+                    }
+                    if(target instanceof Player) {
+                        const impactColor = b.wep === 'laser' ? '#f0f' : '#fa0';
+                        for(let k=0; k<3; k++) this.parts.push(new Particle(target.x + target.w/2, target.y + target.h/2, impactColor, 1.5));
+                    }
+                }
 
                 if(b.wep === 'rpg') {
                     Game.explode(
@@ -676,10 +952,9 @@ export const Game = {
         for(let i=this.pows.length-1;i>=0;i--) {
             let p=this.pows[i]; p.l--; if(p.l<=0){this.pows.splice(i,1);continue;}
             let lr = {...p,w:24,h:24};
-            if(!this.player.flying && !this.player.dashActive && this.player.rectIntersect(lr)) { this.applyPowerup(this.player, p); this.pows.splice(i,1); continue; }
-            const aiMechs = [...this.allies, ...this.rivals];
-            for(let j=0; j<aiMechs.length; j++) {
-                const mech = aiMechs[j];
+            const mechs = this.getMechs();
+            for(let j=0;j<mechs.length;j++) {
+                const mech = mechs[j];
                 if(!mech.flying && !mech.dashActive && mech.rectIntersect(lr)) {
                     this.applyPowerup(mech, p);
                     this.pows.splice(i,1);
@@ -696,12 +971,11 @@ export const Game = {
                 const progress = this.grantKillProgressForVictim(e);
                 const killedByPlayer = progress.killer === this.player;
                 const killedByPlayerSide = progress.killer?.faction === 'player';
-                const reward = killedByPlayer ? progress.reward : 0;
 
                 if (!e._runStatsCounted) {
                     RunStats.kill(e.t, killedByPlayer, isBoss);
                     Logger.event('combat', isBoss ? 'boss_kill' : 'enemy_killed', e.t, {
-                        type: e.t, score: reward, boss: isBoss, byPlayer: killedByPlayer, wave: this.wave,
+                        type: e.t, boss: isBoss, byPlayer: killedByPlayer, wave: this.wave,
                     });
                 }
                 if(isBoss && killedByPlayerSide) {
@@ -728,8 +1002,9 @@ export const Game = {
                     AudioSys.boom(e.x+e.w/2);
                     Cam.trauma = 1.0;
                     this.shake = 30;
-                    // Activate calm period after boss kill
-                    this.calmWavePeriod = true;
+                    // Mission won - resolve once the death cinematic has played out.
+                    this.pendingMissionOutcome = 'win';
+                    this.missionEndAt = this.frame + 130;
                 }
 
                 // Combo only counts player kills, not AI kills
@@ -765,26 +1040,27 @@ export const Game = {
                 for(let j=0; j<mechs.length; j++) {
                     const mech = mechs[j];
                     if(!mech.flying && isHostile(e, mech) && mech.rectIntersect(e)) {
-                        this.damageTarget(mech, e.contact ?? BALANCE.DAMAGE.contact, e);
+                        this.damageTarget(mech, e.contact ?? BALANCE.DAMAGE.contact, e, 'contact'); // existing, untouched
+                        // Mutual contact damage: a mech ramming a monster used to hurt only the mech.
+                        // Dashing is exempt here (Juggernaut Dash already lands its own dash damage +
+                        // knockback on this same enemy this frame - see the dash block in Player.js -
+                        // so this would otherwise double-hit it). Enemy has no i-frame mechanic of its
+                        // own, unlike Player, so it gets its own dedicated cooldown.
+                        if(!mech.dashActive && e.contactCd <= 0) {
+                            this.damageTarget(e, BALANCE.DAMAGE.contact, mech, 'contact');
+                            e.contactCd = BALANCE.DAMAGE.contactCooldown;
+                        }
                     }
                 }
                 // Turret collision
                 for(let i=0; i<Game.friendlies.length; i++) {
                     let f = Game.friendlies[i];
                     if(f instanceof Turret && f.rectIntersect(e)) {
-                        this.damageTarget(f, e.contact ?? BALANCE.DAMAGE.contact, e);
+                        this.damageTarget(f, e.contact ?? BALANCE.DAMAGE.contact, e, 'contact');
                         e.hitT = 10;
                     }
                 }
             }
-        }
-        if(this.player.hp<=0 && !this.playerDead) {
-            this.playerDead = true; this.deathTimer = 150;
-            if (!this.deathReason) this.deathReason = 'SYSTEM COLLAPSE';
-            Logger.event('player', 'player_death', 'player down', { wave: this.wave, score: this.score, class: this.player.type });
-            Game.explode(this.player.x+16, this.player.y+16, 120, true, false, false, false, this.player);
-            this.shake = 30; Cam.trauma = 1.0;
-            for(let k=0; k<10; k++) this.debris.push(new Debris(this.player.x+16, this.player.y+16, '#00eaff'));
         }
         for(let i=this.floaters.length-1;i>=0;i--) { let f=this.floaters[i]; f.update(); if(f.life<=0)this.floaters.splice(i,1); }
         for(let i=0; i<this.weather.length; i++) this.weather[i].update();
@@ -804,7 +1080,7 @@ export const Game = {
             this.accumulator += deltaTime;
             let steps = 0;
             const t0 = performance.now();
-            while (this.accumulator >= this.step) { this.updateLogic(); this.accumulator -= this.step; steps++; }
+            while (this.active && this.accumulator >= this.step) { this.updateLogic(); this.accumulator -= this.step; steps++; }
             const updateMs = performance.now() - t0;
             const alpha = this.accumulator / this.step;
             const t1 = performance.now();
@@ -822,8 +1098,8 @@ export const Game = {
                     audioMs: +audioMs.toFixed(2),
                     steps,
                     enemies: this.enemies.length,
-                    allies: this.allies.length,
-                    rivals: this.rivals.length,
+                    playerLance: this.playerLance.filter(m=>m.hp>0).length,
+                    rivalLance: this.rivalLance.filter(m=>m.hp>0).length,
                     bullets: this.bullets.length,
                     parts: this.parts.length,
                     friendlies: this.friendlies.length,
@@ -843,23 +1119,30 @@ export const Game = {
 
     applyPowerup: function(entity, p) {
         if(p.t==='mine') { Game.explode(p.x,p.y,250,entity.faction==='player',false,false,entity.faction==='rival',entity); this.damageTarget(entity, BALANCE.DAMAGE.mineHp, null); for(let k=0;k<10;k++)this.parts.push(new Particle(p.x,p.y,'#fff')); return; }
+        if(p.t==='resurrect') {
+            const lance = entity.faction === 'player' ? this.playerLance : (entity.faction === 'rival' ? this.rivalLance : null);
+            if(!lance) return;
+            const dead = lance.filter(m => m.hp <= 0);
+            if(dead.length > 0) {
+                const revived = dead[Math.floor(Math.random()*dead.length)];
+                revived.hp = revived.maxHp; revived.shield = 0; revived.inv = 90; revived.justDied = false;
+                const leader = this.leaderOf(revived) || entity;
+                this.placeMechNear(revived, leader, Math.random);
+                if(!entity.isBot) AudioSys.power();
+                Logger.event('bot', 'resurrect', revived.type, { faction: revived.faction, slot: revived.lanceSlot });
+            }
+            return; // full lance: denial pickup, bonus is already consumed by the caller
+        }
         if(!entity.isBot) AudioSys.power();
         if(p.t==='repair') entity.hp=Math.min(entity.maxHp, entity.hp+BALANCE.PICKUPS.repair);
         else if(p.t==='quad') entity.quad=BALANCE.QUAD.duration;
         else if(p.t==='freeze') this.freeze=BALANCE.FREEZE_DURATION;
         else if(p.t==='shield') { entity.shield=Math.min(entity.maxShield, entity.shield+BALANCE.PICKUPS.shield); }
-        else if(['turret','warp','emp','grav','overclock'].includes(p.t)) {
+        else if(['warp','emp','grav','overclock'].includes(p.t)) {
             // Apply module logic
             entity.module = p.t; entity.moduleCd = 0;
-            if(!entity.isBot) {
-                const mu = document.getElementById('module-box');
-                mu.classList.remove('hidden');
-                document.getElementById('mod-name').innerText = this.getModuleName(p.t);
-                document.getElementById('mod-cd').innerText = "READY";
-                document.getElementById('mod-cd').style.color = "#0ff";
-            }
         }
-        else { if(entity.wep===p.t) entity.levels[p.t]++; else { entity.wep=p.t; entity.levels[p.t]=1; } }
+        else { if(entity.wep===p.t) entity.levels[p.t]++; else entity.wep=p.t; }
     },
 
     getModuleName: function(t) {
@@ -927,12 +1210,11 @@ export const Game = {
             renderVisual(pickup.id, { x: p.x, y: p.y + powBounce });
         }
         for(let i=0; i<this.enemies.length; i++) this.enemies[i].draw(alpha);
-        for(let i=0; i<this.allies.length; i++) this.allies[i].draw(alpha);
-        for(let i=0; i<this.rivals.length; i++) this.rivals[i].draw(alpha);
-        if(!this.playerDead) this.player.draw(alpha);
+        for(let i=0; i<this.playerLance.length; i++) this.playerLance[i].draw(alpha);
+        for(let i=0; i<this.rivalLance.length; i++) this.rivalLance[i].draw(alpha);
         for(let i=0; i<this.bullets.length; i++) this.bullets[i].draw(alpha);
         const particlesStartedAt = performance.now();
-        for(let i=this.parts.length-1;i>=0;i--) { let p=this.parts[i]; if(!this.playerDead) p.update(); p.draw(alpha); if(!this.playerDead && p.l<=0)this.parts.splice(i,1); }
+        for(let i=this.parts.length-1;i>=0;i--) { let p=this.parts[i]; if(!this.lanceWiped) p.update(); p.draw(alpha); if(!this.lanceWiped && p.l<=0)this.parts.splice(i,1); }
         this.perfPhases.particlesMs = performance.now() - particlesStartedAt;
         for(let i=0; i<this.debris.length; i++) this.debris[i].draw(alpha);
         for(let i=0; i<this.weather.length; i++) this.weather[i].draw(alpha);
@@ -955,7 +1237,7 @@ export const Game = {
             height: H,
         });
 
-        if(this.playerDead && this.deathTimer > 0) {
+        if(this.lanceWiped && this.deathTimer > 0) {
             const redAlpha = 0.3 + Math.random() * 0.2;
             const flash = Math.random() > 0.5;
             renderVisual('background.death', {
@@ -1000,20 +1282,23 @@ export const Game = {
         if(!this.player) return;
         const domStartedAt = performance.now();
         const glitchText = (txt) => { if(this.player.hp < this.player.maxHp*0.2 && Math.random()>0.7) return "!ERR0R!"; return txt; }
-        document.getElementById('score').innerText = glitchText(this.score);
+        document.getElementById('score').innerText = glitchText(this.missionCE);
         DOM.updateProgression(this.player.level, this.player.xp, xpForNextLevel(this.player.level));
-        document.getElementById('rival-kills').innerText = this.rivalKills;
         document.getElementById('wave').innerText=this.boss?"DANGER":"WAVE "+this.wave;
         document.getElementById('mech-hp').style.width=((this.player.hp/this.player.maxHp)*100)+"%";
+        const hpVal = document.getElementById('mech-hp-value'); if(hpVal) hpVal.textContent = `${Math.ceil(this.player.hp)}/${this.player.maxHp}`;
         const wLvl=this.player.levels[this.player.wep];
         document.getElementById('weapon').innerHTML=this.player.wep.toUpperCase()+` <span style="color:#888;font-size:12px">LVL ${wLvl}</span>`;
         if(this.player.quad > 0) DOM.show('quad-indicator'); else DOM.hide('quad-indicator'); if(this.freeze > 0) DOM.show('freeze-indicator'); else DOM.hide('freeze-indicator');
-        const sb = document.getElementById('shield-val'); if(sb) { sb.style.display = this.player.shield>0 ? 'flex' : 'none'; sb.innerText=this.player.shield; }
+        const sb = document.getElementById('shield-val'); if(sb) { sb.style.display = this.player.shield>0 ? 'flex' : 'none'; sb.innerText=`${this.player.shield}/${this.player.maxShield}`; }
         const jb = document.getElementById('mech-jet'); if(jb) { if(this.player.type === 'heavy') { jb.style.background = HUD_COLORS.red; let pct = (this.player.fuel / this.player.maxFuel) * 100; jb.style.width = pct + "%"; } else { jb.style.background = !this.player.canFly ? HUD_COLORS.red : HUD_COLORS.orange; jb.style.width = (this.player.fuel / this.player.maxFuel * 100) + "%"; } }
+        const jbVal = document.getElementById('mech-jet-value'); if(jbVal) jbVal.textContent = `${Math.ceil(this.player.fuel)}/${this.player.maxFuel}`;
         if(this.player.hp < this.player.maxHp * 0.2) { document.getElementById('ui-layer').classList.add('critical-ui'); } else { document.getElementById('ui-layer').classList.remove('critical-ui'); }
 
-        // UI UPDATE MODULE
+        // UI UPDATE MODULE - resynced every frame so switching control (C) reflects the new mech's module
         if(this.player.module) {
+            DOM.show('module-box');
+            document.getElementById('mod-name').innerText = this.getModuleName(this.player.module);
             const cdElem = document.getElementById('mod-cd');
             if(this.player.moduleCd > 0) {
                  cdElem.innerText = Math.ceil(this.player.moduleCd / 60);
@@ -1022,7 +1307,11 @@ export const Game = {
                  cdElem.innerText = "READY";
                  cdElem.style.color = HUD_COLORS.cyan;
             }
+        } else {
+            DOM.hide('module-box');
         }
+
+        Hub.updateLanceHud(this.playerLance, this.activeSlot);
         this.perfPhases.domMs = performance.now() - domStartedAt;
     }
 };

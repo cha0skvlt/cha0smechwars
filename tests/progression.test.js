@@ -29,7 +29,6 @@ function makePlayer(overrides={}) {
         fuel: 100,
         maxFuel: 100,
         baseMaxFuel: 100,
-        companionCapacity: 0,
         isHumanPlayer: true,
         isBot: false,
         faction: 'player',
@@ -142,20 +141,6 @@ test('naniteSurge FULL ARMOR restores armor pool and shield instantly', () => {
     assert.equal(player.perks.naniteSurge, 1);
 });
 
-test('companion protocol is human-only and unique', () => {
-    const player = makePlayer();
-    const ai = makePlayer({ isHumanPlayer: false, isBot: true, faction: 'rival' });
-
-    assert.equal(isUpgradeAvailable(player, 'companionProtocol'), true);
-    applyUpgrade(player, 'companionProtocol');
-    assert.equal(player.companionCapacity, 1);
-    assert.equal(isUpgradeAvailable(player, 'companionProtocol'), false);
-    assert.equal(
-        rollUpgradeChoices(ai, () => 0, 'ai').some(choice => choice.id === 'companionProtocol'),
-        false,
-    );
-});
-
 test('AI gains personal XP and auto-selects an available perk', () => {
     const ai = makePlayer({ isHumanPlayer: false, isBot: true, faction: 'rival' });
 
@@ -183,11 +168,9 @@ test('fresh mech progression starts at level one after replacement', () => {
         level: 9,
         xp: 999,
         perks: { assaultCore: 4 },
-        companionCapacity: 1,
     });
 
     assert.equal(replacement.level, 1);
     assert.equal(replacement.xp, 0);
     assert.deepEqual(replacement.perks, {});
-    assert.equal(replacement.companionCapacity, 0);
 });

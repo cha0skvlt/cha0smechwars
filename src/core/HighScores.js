@@ -13,8 +13,8 @@ function safeParse(raw) {
 }
 
 function cmp(a, b) {
-    if ((b.score | 0) !== (a.score | 0)) return (b.score | 0) - (a.score | 0);
-    if ((b.wave | 0) !== (a.wave | 0)) return (b.wave | 0) - (a.wave | 0);
+    if ((b.ce | 0) !== (a.ce | 0)) return (b.ce | 0) - (a.ce | 0);
+    if ((b.missionsCleared | 0) !== (a.missionsCleared | 0)) return (b.missionsCleared | 0) - (a.missionsCleared | 0);
     return (b.endedAt | 0) - (a.endedAt | 0);
 }
 
@@ -42,7 +42,7 @@ export const HighScores = {
         this.save(trimmed);
         const endedAt = snap.endedAt;
         const rankIdx = trimmed.findIndex(
-            (e) => e.endedAt === endedAt && (e.score | 0) === (snap.score | 0)
+            (e) => e.endedAt === endedAt && (e.ce | 0) === (snap.ce | 0)
         );
         return { entries: trimmed, rank: rankIdx >= 0 ? rankIdx + 1 : null };
     },

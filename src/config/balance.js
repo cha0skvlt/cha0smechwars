@@ -12,13 +12,15 @@ export const BALANCE = {
         ringPadding: 12,
     },
 
+    // knockback: cosmetic feel only (px shoved along the bullet's travel direction on a landed
+    // hit) - zero effect on DU damage/balance, purely "does this weapon feel like it lands".
     WEAPONS: {
-        pistol:  { damage: 1, speed: 15, baseCd: 18, minCd: 5, size: 6, sizeH: 6 },
-        shotgun: { damage: 1, speed: 15, baseCd: 45, minCd: 20, size: 6, sizeH: 6,
+        pistol:  { damage: 1, speed: 15, baseCd: 18, minCd: 5, size: 6, sizeH: 6, knockback: 3 },
+        shotgun: { damage: 1, speed: 15, baseCd: 45, minCd: 20, size: 6, sizeH: 6, knockback: 4,
                    pelletsBase: 5, spreadL2: 0.48, spreadL1: 0.8, explodeRadiusL3: 30 },
-        mg:      { damage: 1, speed: 15, baseCd: 6,  minCd: 2, size: 6, sizeH: 6, speedMultL3: 1.5 },
-        laser:   { damage: 2, speed: 30, baseCd: 50, minCd: 30, size: 30, sizeH: 2, sizeL3: 45, sizeHL3: 3 },
-        rpg:     { damage: 3, speed: 8,  baseCd: 80, minCd: 40, size: 8, sizeH: 8,
+        mg:      { damage: 1, speed: 15, baseCd: 6,  minCd: 2, size: 6, sizeH: 6, knockback: 2, speedMultL3: 1.5 },
+        laser:   { damage: 2, speed: 30, baseCd: 50, minCd: 30, size: 30, sizeH: 2, knockback: 2, sizeL3: 45, sizeHL3: 3 },
+        rpg:     { damage: 3, speed: 8,  baseCd: 80, minCd: 40, size: 8, sizeH: 8, knockback: 8,
                    splash: { close: 2, mid: 1, far: 1, rClose: 30, rMid: 50, rBase: 80, rL3: 120 },
                    // Softer screen punch + quieter launch/boom than legacy 12/15 shake + 0.3/0.5 vol
                    feel: {
@@ -49,7 +51,8 @@ export const BALANCE = {
         heavy: {
             hp: 18, shield: 12, spd: 3.5,
             fuel: 100, maxFuel: 100, canFly: false, jetMult: 1,
-            dashCost: 40, dashSpeed: 10, dashDuration: 8, dashInv: 12, dashKnockback: 30,
+            // Juggernaut Dash (v8): held-button ground rush, drains fuel per frame instead of a fixed cost/duration.
+            dashSpeed: 10, dashFuelDrain: 1.5, dashPostInv: 12, dashKnockback: 30,
             fuelRegen: 0.5,
         },
         scout: {
@@ -74,7 +77,12 @@ export const BALANCE = {
 
     DAMAGE: {
         contact: 1,
+        // Player mechs self-throttle repeat contact damage via IFRAMES (shieldHit/hpHit); Enemy has
+        // no equivalent i-frame mechanic, so mech->enemy contact damage needs its own cooldown or a
+        // mech standing inside a monster would deal a full hit every single frame.
+        contactCooldown: 30,
         dash: 3,
+        dashMk2: 5, // Juggernaut Dash Mk.2 tactical upgrade (heavy branch)
         emp: 3,
         explodeFriend: 4,
         explodeFriendPush: 1,
@@ -83,6 +91,7 @@ export const BALANCE = {
         explodeEnemyVsMech: 1,
         turretExplode: 5,
         mineHp: 4,
+        seismicSlam: 6, // Seismic Slam tactical upgrade (heavy branch) - dash-end shockwave
     },
 
     PICKUPS: {
@@ -96,6 +105,14 @@ export const BALANCE = {
         fireCd: 10,
         weapon: 'mg',
         weaponLevel: 1,
+    },
+
+    // Battle turret variants (v8) - default is free (mg), rocket/laser are TACTICAL_UPGRADES.battle purchases.
+    // Damage comes from the shared WEAPONS table (no separate turret damage numbers).
+    TURRET_VARIANTS: {
+        mg:     { weapon: 'mg',    weaponLevel: 1, barrels: 1, fireCd: 10 },
+        rocket: { weapon: 'rpg',   weaponLevel: 1, barrels: 2, fireCd: 26 },
+        laser:  { weapon: 'laser', weaponLevel: 1, barrels: 2, fireCd: 22 },
     },
 
     GRAV_WELL: {
@@ -199,15 +216,6 @@ export const BALANCE = {
             rarity: 'rare',
             effects: [{ stat: 'critChance', add: 0.05, max: 0.5 }, { stat: 'fireRateMult', mult: 0.92, min: 0.55 }],
         },
-        companionProtocol: {
-            title: 'COMPANION PROTOCOL',
-            description: 'DEPLOY A FOLLOWER MECH',
-            tag: '+COMPANION',
-            hue: 'ui',
-            rarity: 'rare',
-            audience: 'human',
-            effects: [{ stat: 'companionCapacity', add: 1, max: 1 }],
-        },
     },
 
     QUAD: {
@@ -225,13 +233,133 @@ export const BALANCE = {
     BOT_NEAR_RADIUS_SQ: 160000, // 400^2
     BOTS: {
         classes: ['battle', 'heavy', 'scout'],
-        rivalGroupMin: 1,
-        rivalGroupMax: 3,
-        respawnDelay: 180,
-        companionRespawnDelay: 180,
-        followDistanceSq: 48400, // 220^2
-        leashDistanceSq: 176400, // 420^2
     },
     ENEMY_SEPARATION_SQ: 1024, // 32^2
+    MECH_SEPARATION_SQ: 1600, // 40^2 - lance/rival mechs (all 6 are the same 32x32 hitbox) push apart when this close
+    // Mech<->enemy separation is size-aware (enemies range 32-64px, unlike the two uniform-size
+    // pairings above) - MECH_ENEMY_SEPARATION_PAD is added to (mechHalf + enemyHalf) rather than a
+    // fixed squared-distance constant. SEPARATION_PUSH_MULT is the shared push strength the three
+    // separation systems all use (the other two still hardcode this same 1.5 inline - untouched).
+    MECH_ENEMY_SEPARATION_PAD: 8,
+    SEPARATION_PUSH_MULT: 1.5,
     COMMANDO_DODGE_RADIUS_SQ: 6400, // 80^2
+
+    // --- v8.0 LANCE UPDATE -------------------------------------------------
+
+    // Combat Experience: 1 DU = 1 CE. Mech kill = maxHP (shield excluded) x THE VICTIM'S level
+    // (a leveled-up mech is worth more to kill; killer level is not part of the formula).
+    // Boss kill = full maxHP. Monsters = maxHP x hpMult (existing enemy exp, same formula).
+    // Symmetric for both lances. Unspent CE is a persistent wallet (metagame currency).
+    CE: {
+        unit: 1, // documents the 1 DU = 1 CE identity; readers must not hardcode
+        raceLossShare: 0.5,  // player share of mission CE when the RIVAL lance kills the boss first
+        wipeShare: 0.5,       // player share of mission CE when the player's whole lance is wiped - same 50% penalty as any other mission loss
+    },
+
+    LANCE: {
+        size: 3,
+        triangleSpacing: 90,      // wing-mech offset from leader in formation (px)
+        triangleAngle: 0.6,       // radians of spread either side of due-behind the leader heading (~34deg)
+        followRadiusSq: 48400,    // 220^2 - AI mech starts closing back to leader
+        leashRadiusSq: 176400,    // 420^2 - AI mech must return to leader, ignoring combat
+        tightFollowRadiusSq: 8100,  // 90^2 - Formation Tactics: tight lock-step radius
+        tightLeashRadiusSq: 24336,  // 156^2 - Formation Tactics: tight hard leash
+        cornerMargin: 260,        // distance from a map corner used to anchor lance spawn
+        cornerPairs: [ // opposite (non-adjacent) corners, picked randomly each mission
+            [{ x: 1, y: 1 }, { x: -1, y: -1 }],
+            [{ x: -1, y: 1 }, { x: 1, y: -1 }],
+        ],
+    },
+
+    // Rival Budget: persistent CE wallet for the enemy lance, spent on the same TACTICAL_UPGRADES
+    // catalog as the player. Grows only on player mission wins, so a losing player can never
+    // spiral the rival further ahead.
+    RIVAL: {
+        gainPerWin: 70, // ~40% of avg boss CE ((150+250+130)/3 ~= 176.7) - player stays ahead on wins
+        companyNames: [
+            'BLACK VISOR SYNDICATE', 'IRON COFFIN COMPANY', 'RED LEDGER CARTEL',
+            'ASHFALL CONTRACTORS', 'NULL POINT MERCS', 'GRAVE MARKET LANCE',
+        ],
+    },
+
+    // Contract price streaks: win streak discounts tactical upgrades, loss streak surcharges them.
+    // A win resets the loss streak (and vice versa) - streaks never run concurrently.
+    STREAK: {
+        discountStep: 0.05, discountMax: 0.25, // -5%/win, capped -25%
+        surchargeStep: 0.05, surchargeMax: 0.25, // +5%/loss, capped +25%
+    },
+
+    // Tactical Upgrades shop catalog (v8). Purchased per lance slot (slot+class); reset when a
+    // slot's mech class changes. `lance` branch entries apply to the whole squad, not one slot.
+    // `flag` upgrades change behavior (read by Player.js/Turret.js/BotController.js);
+    // `effects` upgrades reuse the same stat-add shape as progression.js level-up perks.
+    TACTICAL_UPGRADES: {
+        maxPerMech: 4,
+        heavy: {
+            improvedHeavy: {
+                title: 'IMPROVED HEAVY', tag: '+3 HP / +2 SHIELD', cost: 50,
+                effects: [{ stat: 'maxHp', add: 3 }, { stat: 'maxShield', add: 2 }],
+            },
+            bastionShield: {
+                title: 'BASTION SHIELD', tag: 'SHIELD x2 RADIUS - SHELTERS LANCE', cost: 150,
+                flag: 'bastionShield',
+            },
+            seismicSlam: {
+                title: 'SEISMIC SLAM', tag: `DASH-END SHOCKWAVE ${6} DU`, cost: 130,
+                flag: 'seismicSlam',
+            },
+            juggernautMk2: {
+                title: 'JUGGERNAUT DASH MK.2', tag: 'DASH DAMAGE 3->5 DU / +FUEL EFFICIENCY', cost: 120,
+                flag: 'juggernautMk2',
+            },
+        },
+        battle: {
+            improvedBattle: {
+                title: 'IMPROVED BATTLE', tag: '+2 HP / +1 SHIELD', cost: 50,
+                effects: [{ stat: 'maxHp', add: 2 }, { stat: 'maxShield', add: 1 }],
+            },
+            turretRocket: {
+                title: 'ROCKET TURRET', tag: 'TURRET: DUAL RPG BARRELS', cost: 140,
+                flag: 'turretVariant', value: 'rocket',
+            },
+            turretLaser: {
+                title: 'LASER TURRET', tag: 'TURRET: DUAL LASER BARRELS', cost: 130,
+                flag: 'turretVariant', value: 'laser',
+            },
+        },
+        scout: {
+            improvedScout: {
+                title: 'IMPROVED SCOUT', tag: '+2 HP / +1 SHIELD', cost: 50,
+                effects: [{ stat: 'maxHp', add: 2 }, { stat: 'maxShield', add: 1 }],
+            },
+            permaFlight: {
+                title: 'PERMA-FLIGHT', tag: 'ALWAYS AIRBORNE - [SPACE] TO LAND', cost: 130,
+                flag: 'permaFlight',
+            },
+        },
+        lance: {
+            formationTactics: {
+                title: 'FORMATION TACTICS', tag: 'TIGHT TRIANGLE LOCK - BASTION COVERS LANCE', cost: 100,
+                flag: 'formationTactics',
+            },
+        },
+    },
+
+    // Heavy branch ability numbers referenced by TACTICAL_UPGRADES.heavy flags.
+    HEAVY_ABILITIES: {
+        bastionShieldRadiusMult: 2,
+        seismicSlamRadius: 100,
+    },
+
+    // Cosmetic metagame branch (v8.1) - zero effect on DU physics/balance, pure CE sink.
+    // Applied as CSS classes on #game-container; extend this catalog to add more items.
+    COSMETICS: {
+        hudThemes: {
+            hudDefault:  { title: 'DEFAULT CYAN', cost: 0,  cssClass: null },
+            hudEmber:    { title: 'EMBER ORANGE', cost: 80, cssClass: 'hud-theme-ember' },
+            hudToxic:    { title: 'TOXIC LIME',   cost: 80, cssClass: 'hud-theme-toxic' },
+            hudMagenta:  { title: 'SIGNAL MAGENTA', cost: 80, cssClass: 'hud-theme-magenta' },
+            hudBlood:    { title: 'BLOOD RED', cost: 120, cssClass: 'hud-theme-blood' },
+        },
+    },
 };

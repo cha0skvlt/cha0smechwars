@@ -9,6 +9,7 @@ import { Bullet } from './Bullet.js';
 import { Particle } from './effects.js';
 import { applyDamage } from '../combat/damage.js';
 import { shieldRingRadius } from '../combat/shield.js';
+import { separationPush } from '../combat/collision.js';
 
 // Hex '#rgb' / '#rrggbb' → "r, g, b" for rgba()
 function hexToRgbTriplet(hex) {
@@ -29,6 +30,7 @@ export class Enemy extends Entity {
         this.aiT=0; this.hitT=0; this.dodgeCool=0; this.dodging=false;
         this.blood='#a00'; this.dead=false; this.lastAttacker = null;
         this.shieldRegenT = 0;
+        this.contactCd = 0; // frames left before this enemy can take mech-contact damage again
 
         let safe=false; let attempts=0;
         while(!safe && attempts<100){
@@ -92,7 +94,7 @@ export class Enemy extends Entity {
         this.regenShield();
 
         const c=this.center();
-        const targets = Game.getCombatTargets(this).filter(target => !target.flying);
+        const targets = Game.getCombatTargets(this);
         let target = null;
         let distSq = Infinity;
         for(let i=0; i<targets.length; i++) {
@@ -104,14 +106,12 @@ export class Enemy extends Entity {
                 distSq = candidateDistSq;
             }
         }
-        if(!target) return;
-        let dist = Math.sqrt(distSq);
-
-        const ang=Math.atan2(target.y-c.y, target.x-c.x);
-        let spd=this.spd; if(this.hitT>0){spd*=0.5;this.hitT--;} let vx=0, vy=0;
-
-        if(Game.timeScale < 1.0) spd *= Game.timeScale;
-
+        // hitT still ticks down and enemies still keep clear of each other even with no target -
+        // otherwise every nearby mob visibly freezes solid whenever there's genuinely nothing
+        // hostile left in range, which reads as a glitch.
+        if(this.hitT>0) this.hitT--;
+        if(this.contactCd>0) this.contactCd--;
+        let sepVx = 0, sepVy = 0;
         for(let i=0; i<Game.enemies.length; i++) {
             let e = Game.enemies[i];
             if(e !== this && !e.dead) {
@@ -119,11 +119,53 @@ export class Enemy extends Entity {
                 let dSq = edx*edx + edy*edy;
                 if(dSq < BALANCE.ENEMY_SEPARATION_SQ && dSq > 0) {
                     let invD = 1 / Math.sqrt(dSq);
-                    vx += edx * invD * 1.5;
-                    vy += edy * invD * 1.5;
+                    sepVx += edx * invD * 1.5;
+                    sepVy += edy * invD * 1.5;
                 }
             }
         }
+        // Enemy<->mech separation: mirrors Player.js's mech<->enemy push. Size-aware via
+        // separationPush since this one class covers both 32px zombies and 64px bosses. Skips
+        // flying/dashing mechs, matching the mech-side gate so both halves of the pairing agree on
+        // what counts as a real collision.
+        {
+            const myCx = this.x + this.w/2, myCy = this.y + this.h/2, myHalf = this.w/2;
+            const mechs = Game.getMechs();
+            for(let i=0; i<mechs.length; i++) {
+                const mech = mechs[i];
+                if(mech.flying || mech.dashActive) continue;
+                const push = separationPush(
+                    myCx, myCy, myHalf,
+                    mech.x + mech.w/2, mech.y + mech.h/2, mech.w/2,
+                    BALANCE.MECH_ENEMY_SEPARATION_PAD, BALANCE.SEPARATION_PUSH_MULT,
+                );
+                if(push) { sepVx += push.x; sepVy += push.y; }
+            }
+        }
+
+        if(!target) {
+            // No reachable (grounded) target nearby - drift gently instead of freezing solid.
+            this.idleT = (this.idleT || 0) + 1;
+            if(!this.idleVec || this.idleT % 90 === 0) {
+                const idleAng = Math.random() * Math.PI * 2;
+                this.idleVec = { x: Math.cos(idleAng), y: Math.sin(idleAng) };
+            }
+            const idleSpd = this.spd * 0.3 * (Game.timeScale < 1.0 ? Game.timeScale : 1);
+            const vx = this.idleVec.x * idleSpd + sepVx;
+            const vy = this.idleVec.y * idleSpd + sepVy;
+            if(this.t === 'eye') { this.x += vx; this.y += vy; }
+            else {
+                if(!Game.checkWall({x:this.x+vx,y:this.y,w:this.w,h:this.h})) this.x += vx;
+                if(!Game.checkWall({x:this.x,y:this.y+vy,w:this.w,h:this.h})) this.y += vy;
+            }
+            return;
+        }
+        let dist = Math.sqrt(distSq);
+
+        const ang=Math.atan2(target.y-c.y, target.x-c.x);
+        let spd=this.spd; if(this.hitT>0) spd*=0.5; let vx=sepVx, vy=sepVy;
+
+        if(Game.timeScale < 1.0) spd *= Game.timeScale;
 
         const primary = this.wep(0);
         const secondary = this.wep(1);
@@ -131,13 +173,13 @@ export class Enemy extends Entity {
 
         if(this.t==='mantis') {
             this.aiT++;
-            let rage = (this.hp < BALANCE.ENEMIES.mantis.hp * Game.getDifficultyMultiplier() * 0.5);
+            let rage = (this.hp < this.maxHp * 0.5);
             let currentSpd = rage ? spd * 1.5 : spd;
             if(rage && Game.frame % 10 < 5) this.c = '#f00';
             else if(rage) this.c = '#fff';
             else this.c = this.baseColor;
             if(this.aiT < 60) { vx += Math.cos(ang)*currentSpd; vy += Math.sin(ang)*currentSpd; }
-            else if(this.aiT < (rage ? 75 : 90)) { vx=0; vy=0; }
+            else if(this.aiT < (rage ? 75 : 90)) { vx=sepVx; vy=sepVy; }
             else if(primary) {
                 let step = rage ? 0.15 : 0.25;
                 for(let i=-0.5; i<=0.5; i+=step) this.fireBullet(c.x,c.y,ang+i,primary);
@@ -148,7 +190,7 @@ export class Enemy extends Entity {
             this.aiT++;
             vx += Math.cos(ang)*spd; vy += Math.sin(ang)*spd;
             if(this.aiT%10===0 && primary) {
-                this.fireBullet(c.x,c.y,ang+(Math.random()-.2)*.4,primary);
+                this.fireBullet(c.x,c.y,ang+(Math.random()-.5)*.4,primary);
                 AudioSys.shoot(primary, this.x);
             }
             if(this.aiT%120===0 && secondary) {
@@ -176,7 +218,8 @@ export class Enemy extends Entity {
                     let b=Game.bullets[i];
                     if(!b.enemy && !b.dead) {
                         let bdx=b.x-c.x, bdy=b.y-c.y;
-                        if(bdx*bdx+bdy*bdy < BALANCE.COMMANDO_DODGE_RADIUS_SQ) {
+                        const approaching = (-bdx)*b.vx + (-bdy)*b.vy > 0;
+                        if(approaching && bdx*bdx+bdy*bdy < BALANCE.COMMANDO_DODGE_RADIUS_SQ) {
                             let perp = ang + Math.PI/2 * (Math.random()>0.5?1:-1);
                             vx += Math.cos(perp)*spd*4; vy += Math.sin(perp)*spd*4;
                             dodge=true; this.dodging = 20; this.dodgeCool = 120;
@@ -187,7 +230,7 @@ export class Enemy extends Entity {
             if(!dodge && !this.dodging) {
                 this.aiT++;
                 if(this.aiT > 100) {
-                    vx=0; vy=0;
+                    vx=sepVx; vy=sepVy;
                     if(this.aiT%5===0 && primary) {
                         this.fireBullet(c.x,c.y,ang+(Math.random()-.5)*0.2,primary);
                         AudioSys.shoot(primary, this.x);
@@ -239,8 +282,12 @@ export class Enemy extends Entity {
             else { vx += Math.cos(ang+1.57)*spd*0.5; vy += Math.sin(ang+1.57)*spd*0.5; }
             this.aiT++;
             if(this.aiT > 80) {
-                vx=0; vy=0;
-                if(this.aiT > 120 && primary) {
+                // Keep backing off (the retreat impulse computed above) instead of freezing in
+                // place if the target closed to point-blank mid-charge - otherwise the aim-lock
+                // below never fires (dist gate) and never resets, leaving the sniper stuck frozen
+                // in melee range for as long as the target stays close.
+                if(dist > 150) { vx=sepVx; vy=sepVy; }
+                if(this.aiT > 120 && primary && dist > 150) {
                     this.fireBullet(c.x,c.y,ang,primary);
                     AudioSys.shoot(primary, this.x); this.aiT=0;
                 }

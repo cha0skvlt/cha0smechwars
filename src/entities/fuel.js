@@ -4,14 +4,6 @@ function validateFuelState(entity) {
     }
 }
 
-export function consumeFuel(entity, cost) {
-    validateFuelState(entity);
-    if(!Number.isFinite(cost) || cost < 0) throw new TypeError('Fuel cost must be non-negative');
-    if(entity.fuel < cost) return false;
-    entity.fuel -= cost;
-    return true;
-}
-
 export function regenerateFuel(entity, rate) {
     validateFuelState(entity);
     if(!Number.isFinite(rate) || rate < 0) throw new TypeError('Fuel regeneration must be non-negative');

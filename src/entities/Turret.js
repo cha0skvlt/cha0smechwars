@@ -8,6 +8,8 @@ import { applyDamage, isHostile } from '../combat/damage.js';
 import { renderVisual } from '../render/PixelRenderer.js';
 
 // @meta:Turret - Stationary turret that auto-targets and shoots enemies
+// v8: battle mechs deploy it for free (mg barrel); ROCKET/LASER TURRET tactical upgrades swap
+// the barrel via BALANCE.TURRET_VARIANTS - damage still comes from the shared WEAPONS table.
 export class Turret extends Entity {
     constructor(x,y, owner=null) {
         const t = BALANCE.TURRET;
@@ -16,6 +18,8 @@ export class Turret extends Entity {
         this.faction = owner?.faction || 'player';
         this.hp = t.hp;
         this.cd = 0;
+        const variantId = (owner && BALANCE.TURRET_VARIANTS[owner.turretVariant]) ? owner.turretVariant : 'mg';
+        this.variant = BALANCE.TURRET_VARIANTS[variantId];
         // Only the human player's turret grants score/XP
         this.grantsPlayerKillCredit = !!(owner && owner.isHumanPlayer);
     }
@@ -36,12 +40,16 @@ export class Turret extends Entity {
              }
              if(closest) {
                  const ang = Math.atan2(closest.y-this.y, closest.x-this.x);
-                 const t = BALANCE.TURRET;
-                 const b = new Bullet(this.x+8, this.y+8, ang, t.weapon, false, t.weaponLevel, this);
-                 b.airborne = false;
-                 Game.bullets.push(b);
-                 AudioSys.shoot(t.weapon, this.x);
-                 this.cd = t.fireCd;
+                 const barrels = this.variant.barrels || 1;
+                 const spread = 0.12;
+                 for(let i=0; i<barrels; i++) {
+                     const barrelAng = barrels > 1 ? ang + (i - (barrels-1)/2) * spread : ang;
+                     const b = new Bullet(this.x+8, this.y+8, barrelAng, this.variant.weapon, false, this.variant.weaponLevel, this);
+                     b.airborne = false;
+                     Game.bullets.push(b);
+                 }
+                 AudioSys.shoot(this.variant.weapon, this.x);
+                 this.cd = this.variant.fireCd;
              }
         }
     }
@@ -52,7 +60,7 @@ export class Turret extends Entity {
     draw(alpha) {
          let dX = lerp(this.lastX, this.x, alpha); let dY = lerp(this.lastY, this.y, alpha);
 
-         if(this.cd > BALANCE.TURRET.fireCd - 3) {
+         if(this.cd > this.variant.fireCd - 3) {
              renderVisual('effect.turret.flash', { x: dX, y: dY });
          }
 

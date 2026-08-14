@@ -1,4 +1,5 @@
 // Live per-run kill / rival counters (source of truth for game-over + highscore)
+// v8: SCORE removed in favor of Combat Experience (CE) - see BALANCE.CE / GAME_SYS.md.
 
 function emptyBag() {
     return Object.create(null);
@@ -19,7 +20,8 @@ export const RunStats = {
     class: null,
     biome: null,
     wave: 1,
-    score: 0,
+    ce: 0,
+    missionsCleared: 0,
     rivalKills: 0,
     playerKills: emptyBag(),
     botKills: emptyBag(),
@@ -30,7 +32,8 @@ export const RunStats = {
         this.class = meta.class || null;
         this.biome = meta.biome || null;
         this.wave = 1;
-        this.score = 0;
+        this.ce = 0;
+        this.missionsCleared = 0;
         this.rivalKills = 0;
         this.playerKills = emptyBag();
         this.botKills = emptyBag();
@@ -42,8 +45,6 @@ export const RunStats = {
         if (meta.class != null) this.class = meta.class;
         if (meta.biome != null) this.biome = meta.biome;
         if (meta.wave != null) this.wave = meta.wave;
-        if (meta.score != null) this.score = meta.score;
-        if (meta.rivalKills != null) this.rivalKills = meta.rivalKills;
     },
 
     kill(type, byPlayer, isBoss = false) {
@@ -60,6 +61,15 @@ export const RunStats = {
         this.rivalKills++;
     },
 
+    /** Credit Combat Experience to the run total (wallet-share already applied by the caller). */
+    ceEarned(amount) {
+        this.ce += Math.max(0, amount | 0);
+    },
+
+    missionCleared() {
+        this.missionsCleared++;
+    },
+
     snapshot(reason) {
         const playerKills = { ...this.playerKills };
         const botKills = { ...this.botKills };
@@ -67,7 +77,8 @@ export const RunStats = {
             class: this.class,
             biome: this.biome,
             wave: this.wave | 0,
-            score: this.score | 0,
+            ce: this.ce | 0,
+            missionsCleared: this.missionsCleared | 0,
             rivalKills: this.rivalKills | 0,
             reason: reason || null,
             endedAt: Date.now(),

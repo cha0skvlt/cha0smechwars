@@ -2,7 +2,12 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>CHA0S MECH WARS: v7.3 STABLE</title>
+    <title>CHA0S MECH WARS: v8.0</title>
+    <!-- Battle mech mascot (same pixel mask/color as sprite.player.battle) as the site icon everywhere -->
+    <link rel="icon" type="image/svg+xml" href="/src/assets/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/src/assets/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/src/assets/favicon-16.png">
+    <link rel="apple-touch-icon" href="/src/assets/apple-touch-icon.png">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/src/style.css">
 </head>
@@ -12,6 +17,7 @@
         <div class="boss-container" id="boss-hp-box">
             <div class="boss-label" id="boss-name">TARGET</div>
             <div class="boss-fill" id="boss-hp-bar"></div>
+            <div class="bar-value" id="boss-hp-value"></div>
         </div>
         <div class="boss-death-msg" id="boss-death-msg">TARGET DESTROY!!!</div>
         <div id="biome-msg" class="biome-alert hidden"></div>
@@ -19,20 +25,22 @@
 
         <!-- HUD STRUCTURE -->
         <div class="hud-panel">
-            <!-- LEFT GROUP -->
-            <div class="stat-box">SCORE <span class="text-highlight" id="score">0</span></div>
-            <div class="stat-box">
-                <div class="skull-red" style="margin-right: 10px;">💀</div>
-                <span class="text-highlight" id="rival-kills">0</span>
-            </div>
             <!-- RIGHT GROUP -->
             <div class="stat-box">
                 <div class="text-warn" id="wave">WAVE 1</div>
             </div>
         </div>
 
+        <div class="kill-feed-msg hidden" id="kill-feed-msg">
+            <div class="kill-feed-text">ENEMY MECH DESTROYED</div>
+            <div class="kill-feed-count">MECHS DESTROYED: 0</div>
+        </div>
+
         <div class="hud-panel" style="align-items: flex-end;">
             <div class="status-group">
+                <div class="lance-strip" id="lance-strip"></div>
+                <div class="lance-hint">[C] SWITCH MECH</div>
+
                 <!-- MODULE UI MOVED ABOVE WEAPON -->
                 <div id="module-box" class="stat-box hidden" style="min-width: 120px; justify-content: space-between;">
                     <span id="mod-name" style="color:#0ff; font-size:12px;">MODULE</span>
@@ -49,16 +57,20 @@
 
                 <div class="hp-label">ARMOR INTEGRITY</div>
                 <div class="hp-row">
-                    <div class="mech-hp-container"><div id="mech-hp" class="mech-hp-fill"></div></div>
+                    <div class="mech-hp-container"><div id="mech-hp" class="mech-hp-fill"></div><div id="mech-hp-value" class="bar-value"></div></div>
                     <div id="shield-val" class="shield-circle">5</div>
                 </div>
-                <div class="mech-jet-container"><div id="mech-jet" class="mech-jet-fill"></div></div>
+                <div class="jet-row">
+                    <div class="mech-jet-container"><div id="mech-jet" class="mech-jet-fill"></div></div>
+                    <span id="mech-jet-value" class="jet-value"></span>
+                </div>
             </div>
         </div>
 
         <div class="progression-hud">
             <div class="progression-label">
                 <span id="player-level">LEVEL 1</span>
+                <span class="hud-ce">CE <span class="text-highlight" id="score">0</span></span>
                 <span id="xp-value">0 / 26 XP</span>
             </div>
             <div class="xp-track"><div id="xp-fill" class="xp-fill"></div></div>
@@ -82,30 +94,70 @@
     </div>
 
     <div id="start-screen">
+        <div class="fit-scale">
         <h1 style="font-size: 80px; color: #fff; text-shadow: 0 0 20px #00eaff;">CHA0S<br><span style="font-size:40px; color:#00eaff">MECH WARS</span></h1>
         <button class="btn" id="start-btn">INITIATE SYSTEM</button>
-        <div class="info-text">WASD: MOVE | MOUSE: FIRE | P: PAUSE<br><span style="color:#f90">[SPACE] ABILITY (DEPENDS ON CLASS)</span><br><br><span style="color:#f90">[S] SHOTGUN</span> <span style="color:#bf0">[M] MG</span> <span style="color:#ff0">[R] RPG</span> <span style="color:#f0f">[L] LASER</span><br><span style="color:#0ff">[SHIFT] ACTIVATE MODULE</span></div>
-    </div>
-    <div id="class-select-screen" class="hidden">
-        <h1 style="font-size: 36px; margin-bottom: 40px; color: #fff; text-shadow: 0 0 10px #fff;">SELECT CHASSIS</h1>
-        <div class="class-container">
-            <div class="mech-card" data-type="battle" data-class="battle"><h2>BATTLE</h2><canvas id="preview-battle" class="mech-preview"></canvas><div class="stat-row"><span>HP</span><div class="stat-bar"><div class="stat-fill" style="width: 66%; background:#00eaff"></div></div></div><div class="stat-row"><span>SPD</span><div class="stat-bar"><div class="stat-fill" style="width: 80%; background:#eb2"></div></div></div><div class="stat-row"><span>SHLD</span><div class="stat-bar"><div class="stat-fill" style="width: 50%; background:#0ff"></div></div></div><div class="ability">[SPACE] JETPACK</div><div class="desc">Balanced MK.I chassis. Medium Regen. Reliable.</div></div>
-            <div class="mech-card" data-type="heavy" data-class="heavy"><h2>HEAVY</h2><canvas id="preview-heavy" class="mech-preview"></canvas><div class="stat-row"><span>HP</span><div class="stat-bar"><div class="stat-fill" style="width: 100%; background:#f90"></div></div></div><div class="stat-row"><span>SPD</span><div class="stat-bar"><div class="stat-fill" style="width: 50%; background:#eb2"></div></div></div><div class="stat-row"><span>SHLD</span><div class="stat-bar"><div class="stat-fill" style="width: 100%; background:#0ff"></div></div></div><div class="ability">[SPACE] RAM DASH</div><div class="desc">High armor. Medium Shield Regen. Explosive Dash.</div></div>
-            <div class="mech-card" data-type="scout" data-class="scout"><h2>SCOUT</h2><canvas id="preview-scout" class="mech-preview"></canvas><div class="stat-row"><span>HP</span><div class="stat-bar"><div class="stat-fill" style="width: 50%; background:#0f0"></div></div></div><div class="stat-row"><span>SPD</span><div class="stat-bar"><div class="stat-fill" style="width: 100%; background:#eb2"></div></div></div><div class="stat-row"><span>SHIELD</span><div class="stat-bar"><div class="stat-fill" style="width: 33%; background:#0ff"></div></div></div><div class="ability">[SPACE] TURBO JETS</div><div class="desc">Fragile (Max Shield 4). 3x Fuel. 2x Flight speed. Hit and run.</div></div>
+        <div class="info-text">WASD: MOVE | MOUSE: FIRE | P: PAUSE | C: SWITCH MECH<br><span style="color:#f90">[SPACE] ABILITY</span><br><span style="color:#0ff">[SHIFT] ACTIVATE MODULE</span><br><span class="info-text-divider">IN GAME</span><br><span style="color:#f90">[S] SHOTGUN</span> <span style="color:#bf0">[M] MG</span> <span style="color:#ff0">[R] RPG</span> <span style="color:#f0f">[L] LASER</span><br><span style="color:#00eaff">[A] REPAIR</span> <span style="color:#00eaff">[O] SHIELD</span> <span style="color:#f0f">[Q] QUAD</span> <span style="color:#60f">[Z] FREEZE</span> <span style="color:#0f0">[V] RESURRECT</span> <span style="color:#0ff">[E] MODULE</span></div>
         </div>
     </div>
+    <div id="lance-hub-screen" class="hidden hub-screen">
+      <div class="fit-scale">
+        <div class="hub-header">
+            <h1 class="hub-title">LANCE COMMAND</h1>
+            <div class="hub-wallet-row">
+                <div class="stat-box">CE WALLET <span class="text-highlight" id="hub-ce-wallet">0</span></div>
+                <div class="stat-box" id="hub-streak-box"><span id="hub-streak">NO STREAK</span></div>
+            </div>
+            <div class="hub-mission-result hidden" id="hub-mission-result"></div>
+        </div>
+        <div class="hub-body">
+            <div class="hub-column hub-column-lance">
+                <div class="hub-section-title">CHASSIS</div>
+                <div class="hub-class-cards" id="hub-class-cards">
+                    <div class="mech-card hub-mini-card" data-class="battle"><h2>BATTLE</h2><canvas id="preview-battle" class="mech-preview"></canvas><div class="stat-row" data-stat="hp"><span>HP</span><div class="stat-bar"><div class="stat-fill" style="background:#00eaff"></div></div><span class="stat-value"></span></div><div class="stat-row" data-stat="spd"><span>SPD</span><div class="stat-bar"><div class="stat-fill" style="background:#eb2"></div></div><span class="stat-value"></span></div><div class="stat-row" data-stat="shield"><span>SHLD</span><div class="stat-bar"><div class="stat-fill" style="background:#0ff"></div></div><span class="stat-value"></span></div><div class="ability">[SHIFT] TURRET</div><div class="desc">Balanced. Deploys a free auto-turret.</div></div>
+                    <div class="mech-card hub-mini-card" data-class="heavy"><h2>HEAVY</h2><canvas id="preview-heavy" class="mech-preview"></canvas><div class="stat-row" data-stat="hp"><span>HP</span><div class="stat-bar"><div class="stat-fill" style="background:#f90"></div></div><span class="stat-value"></span></div><div class="stat-row" data-stat="spd"><span>SPD</span><div class="stat-bar"><div class="stat-fill" style="background:#eb2"></div></div><span class="stat-value"></span></div><div class="stat-row" data-stat="shield"><span>SHLD</span><div class="stat-bar"><div class="stat-fill" style="background:#0ff"></div></div><span class="stat-value"></span></div><div class="ability">[SPACE] JUGGERNAUT DASH</div><div class="desc">High armor. Held ground rush, contact-immune.</div></div>
+                    <div class="mech-card hub-mini-card" data-class="scout"><h2>SCOUT</h2><canvas id="preview-scout" class="mech-preview"></canvas><div class="stat-row" data-stat="hp"><span>HP</span><div class="stat-bar"><div class="stat-fill" style="background:#0f0"></div></div><span class="stat-value"></span></div><div class="stat-row" data-stat="spd"><span>SPD</span><div class="stat-bar"><div class="stat-fill" style="background:#eb2"></div></div><span class="stat-value"></span></div><div class="stat-row" data-stat="shield"><span>SHIELD</span><div class="stat-bar"><div class="stat-fill" style="background:#0ff"></div></div><span class="stat-value"></span></div><div class="ability">[SPACE] TURBO JETS</div><div class="desc">Fragile. 3x fuel, 2x flight speed.</div></div>
+                </div>
+                <div class="hub-section-title">LANCE SLOTS</div>
+                <div class="hub-slots" id="hub-slots"></div>
+                <button class="btn hub-deploy-btn" id="hub-deploy-btn" disabled>DEPLOY</button>
+            </div>
+            <div class="hub-column hub-column-shop">
+                <div class="hub-tabs">
+                    <button class="hub-tab active" data-tab="tactical" id="hub-tab-btn-tactical">TACTICAL</button>
+                    <button class="hub-tab" data-tab="cosmetic" id="hub-tab-btn-cosmetic">COSMETIC</button>
+                </div>
+                <div class="hub-tab-panel" id="hub-tab-tactical"></div>
+                <div class="hub-tab-panel hidden" id="hub-tab-cosmetic"></div>
+            </div>
+        </div>
+      </div>
+    </div>
+    <div id="contract-briefing-screen" class="hidden hub-screen">
+      <div class="fit-scale">
+        <h1 class="hub-title">CONTRACT BRIEFING</h1>
+        <div class="briefing-biome" id="briefing-biome">FOREST</div>
+        <div class="briefing-rival">
+            <div class="briefing-rival-label">YOUR OPPONENTS:</div>
+            <div class="briefing-rival-name" id="briefing-company-name">—</div>
+            <div class="briefing-rival-kills">BLOOD DEBT: <span class="text-highlight" id="briefing-rival-kills">0</span></div>
+            <div class="briefing-rival-cards" id="briefing-rival-cards"></div>
+            <div class="briefing-rival-shared" id="briefing-rival-shared"></div>
+        </div>
+        <button class="btn" id="briefing-deploy-btn">DEPLOY LANCE</button>
+      </div>
+    </div>
     <div id="game-over-screen" class="hidden">
-        <h1 style="color: #f00;">CRITICAL<br>FAILURE</h1>
+      <div class="fit-scale">
         <div id="death-reason" class="go-reason">SYSTEM COLLAPSE</div>
         <div class="go-score-row">
-            SCORE: <span class="text-highlight" id="final-score">0</span>
+            <span class="go-score-label">COMBAT EXPERIENCE:</span> <span class="text-highlight" id="final-score">0</span>
             <span id="go-rank-badge" class="go-rank-badge hidden"></span>
         </div>
         <div class="go-meta">
+            <span id="go-biome">—</span>
             <span id="go-wave">WAVE 1</span>
             <span id="go-class">—</span>
-            <span id="go-biome">—</span>
-            <span>RIVAL <span class="text-highlight" id="go-rival">0</span></span>
         </div>
         <div class="go-kills">
             <div class="go-kill-block">
@@ -121,7 +173,8 @@
             <div class="go-hs-title">HIGH SCORES</div>
             <div id="go-highscores" class="go-hs-list"></div>
         </div>
-        <button class="btn" id="reboot-btn">REBOOT</button>
+        <button class="btn" id="reboot-btn">RETURN TO LANCE HUB</button>
+      </div>
     </div>
     <div id="error-screen"><h1 style="color: #f00; font-size: 30px;">SYSTEM ERROR</h1><div id="error-msg" style="color: #fff; font-family: monospace; font-size: 12px; max-width: 80%;"></div></div>
     <canvas id="game"></canvas>

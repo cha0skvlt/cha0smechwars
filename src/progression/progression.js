@@ -7,7 +7,6 @@ export function initializeProgression(actor) {
     actor.critChance = BALANCE.CRIT.chance;
     actor.shieldRegenRate = BALANCE.SHIELD.regenRate;
     actor.fireRateMult = 1;
-    actor.companionCapacity = 0;
     return actor;
 }
 
@@ -15,9 +14,17 @@ export function xpForNextLevel(level) {
     return BALANCE.PROGRESSION.baseXp + (level - 1) * BALANCE.PROGRESSION.xpStep;
 }
 
+/** Combat Experience for a monster/boss kill: 1 DU = 1 CE, shield excluded (maxHp only). */
 export function killReward(maxHp) {
     if(!Number.isFinite(maxHp) || maxHp < 0) throw new TypeError('Enemy max HP must be a non-negative number');
     return Math.ceil(maxHp);
+}
+
+/** Combat Experience for a mech kill: victim maxHp x victim level (both lances, same formula). */
+export function mechKillReward(maxHp, level) {
+    if(!Number.isFinite(maxHp) || maxHp < 0) throw new TypeError('Mech max HP must be a non-negative number');
+    if(!Number.isFinite(level) || level < 1) throw new TypeError('Mech level must be a positive number');
+    return Math.ceil(maxHp * level);
 }
 
 /** Score/XP only for the human player or player-owned modules. Bot/rival kills never credit. */
